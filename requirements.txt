@@ -4,6 +4,8 @@ pymongo
 pyrofork
 TgCrypto-pyrofork
 pillow
+gunicorn
+
 pyrogram
 tgcrypto
 asyncpg
