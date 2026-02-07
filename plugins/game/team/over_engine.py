@@ -27,37 +27,140 @@ def get_mention(match, user_id):
     name = match.get("user_cache", {}).get(user_id, "Player")
     return f'<a href="tg://user?id={user_id}">{name}</a>'
 
-async def announce_achievement_group(client, chat_id, user_id, ach, match):
-    name = match.get("user_cache", {}).get(user_id, "Player")
-    rarity_icon = {
-        "common": "✨",
-        "rare": "💎",
-        "epic": "🔥",
-        "legendary": "👑"
-    }.get(ach["rarity"], "🏆")
+import random
 
-    text = (
-        f"{rarity_icon} <b>Achievement Unlocked!</b>\n\n"
-        f"👤 <b>{name}</b>\n"
-        f"🏆 <b>{ach['title']}</b>\n"
-        f"📖 {ach['description']}"
+def _mention(user_id, match):
+    name = match.get("user_cache", {}).get(user_id, "Player")
+    return f"<a href='tg://user?id={user_id}'>{name}</a>"
+
+
+# 🎭 FUN COMMENTARY POOLS
+BATTER_LINES = {
+    50: [
+        "{p} raises the bat 🏏 Half-century loaded.",
+        "Classy stuff! {p} cruises to 50.",
+        "Fifty up! {p} is cooking now 🔥",
+        "{p} completes a well-earned 50. Respect."
+    ],
+    100: [
+        "CENTURY! 💯 {p} has rewritten the script.",
+        "{p} goes full beast mode 💥 Hundred on the board.",
+        "Standing ovation 👏 {p} brings up a ton.",
+        "What a knock! {p} hits 100 in style."
+    ],
+    150: [
+        "150! This is domination by {p}.",
+        "{p} refuses to stop. 150 and counting 👑",
+        "Absolute massacre. {p} reaches 150."
+    ],
+    250: [
+        "HISTORY ALERT 🚨 {p} smashes 250!",
+        "Unreal innings… {p} hits 250 😵‍💫",
+        "This is illegal batting. 250 for {p}."
+    ]
+}
+
+BOWLER_LINES = {
+    3: [
+        "{p} strikes thrice 🎯 3-wicket haul!",
+        "Bowling clinic! {p} picks up 3.",
+        "{p} is on fire 🔥 Three wickets down!"
+    ],
+    5: [
+        "FIVE-FOR! 🖐️ {p} demolishes the batting.",
+        "{p} claims a 5-wicket haul. Carnage.",
+        "Bowling royalty 👑 5 wickets for {p}."
+    ],
+    "HAT_TRICK": [
+        "HAT-TRICK 🎩🎩🎩 {p} has lost his mind!",
+        "Three in three! {p} goes nuclear 💣",
+        "Hat-trick scenes 😱 Courtesy: {p}"
+    ]
+}
+
+PARTNERSHIP_LINES = {
+    50: [
+        "{p1} & {p2} build a solid 50-run stand 🤝",
+        "Good vibes only 😌 50 partnership!"
+    ],
+    100: [
+        "CENTURY STAND 💯 {p1} & {p2} are unstoppable!",
+        "What a partnership! 100 runs together 🔥"
+    ]
+}
+
+async def announce_achievement_group(client, chat_id, achievement, match):
+    """
+    achievement = dict returned by evaluate_and_unlock_achievements
+    Example:
+    {
+        "type": "BAT_50",
+        "user_id": 123,
+        "value": 50
+    }
+    """
+
+    t = achievement["type"]
+
+    # ───────── BATTER MILESTONES ─────────
+    if t.startswith("BAT_"):
+        runs = achievement["value"]
+        user_id = achievement["user_id"]
+        p = _mention(user_id, match)
+
+        lines = BATTER_LINES.get(runs)
+        if not lines:
+            return
+
+        text = random.choice(lines).format(p=p)
+
+    # ───────── BOWLER MILESTONES ─────────
+    elif t.startswith("BOWL_"):
+        wickets = achievement["value"]
+        user_id = achievement["user_id"]
+        p = _mention(user_id, match)
+
+        if wickets == 3:
+            text = random.choice(BOWLER_LINES[3]).format(p=p)
+        elif wickets == 5:
+            text = random.choice(BOWLER_LINES[5]).format(p=p)
+        else:
+            return
+
+    elif t == "HAT_TRICK":
+        user_id = achievement["user_id"]
+        p = _mention(user_id, match)
+        text = random.choice(BOWLER_LINES["HAT_TRICK"]).format(p=p)
+
+    # ───────── PARTNERSHIP ─────────
+    elif t.startswith("PARTNERSHIP_"):
+        value = achievement["value"]
+        p1 = _mention(achievement["p1"], match)
+        p2 = _mention(achievement["p2"], match)
+
+        lines = PARTNERSHIP_LINES.get(value)
+        if not lines:
+            return
+
+        text = random.choice(lines).format(p1=p1, p2=p2)
+
+    else:
+        return
+
+    await client.send_message(
+        chat_id,
+        f"🏆 <b>Achievement Unlocked!</b>\n<i>{text}</i>",
+        parse_mode=ParseMode.HTML
     )
 
-    await client.send_message(chat_id, text, parse_mode=ParseMode.HTML)
-async def announce_achievement_dm(client, user_id, ach):
+async def announce_achievement_dm(client, user_id, achievement):
     try:
         await client.send_message(
             user_id,
-            (
-                "🏆 <b>Achievement Unlocked!</b>\n\n"
-                f"<b>{ach['title']}</b>\n"
-                f"{ach['description']}"
-            ),
-            parse_mode=ParseMode.HTML
+            f"🏆 Achievement unlocked!\n\n{achievement.get('title','Nice one!')} 🎉"
         )
-    except Exception:
-        pass  # ❌ NEVER CRASH
-
+    except:
+        pass
 
 
 def should_announce_in_group(ach):
@@ -139,6 +242,14 @@ async def update_game_in_db(match):
 
 async def advance_ball(match, result):
     # 🧪 DEBUG: ENTRY PROOF
+
+    # 🏆 Achievement memory (prevents duplicate announcements)
+    match.setdefault("announced_achievements", {
+        "batting": {},        # user_id -> set of milestones
+        "bowling": {},        # user_id -> set of milestones
+        "partnerships": set() # {(p1, p2, value)}
+    })
+
     print("➡️ advance_ball ENTER | result =", result)
 
     # 🚀 FIX: Client must come from match ONLY
@@ -198,16 +309,61 @@ async def advance_ball(match, result):
 
             match["partnership"] += runs
             match["partnership_balls"] += 1
+            # 🤝 PARTNERSHIP ACHIEVEMENTS
+            if has_client:
+                s = match.get("striker")
+                ns = match.get("non_striker")
+
+                if s and ns:
+                    for value in (50, 100):
+                        key = tuple(sorted((s, ns)) + [value])
+
+                        if match["partnership"] >= value and key not in match["announced_achievements"]["partnerships"]:
+                            match["announced_achievements"]["partnerships"].add(key)
+
+                            msg = {
+                                50: "Nice stand building 🤝 {p1} & {p2} cross 50",
+                                100: "CENTURY STAND 💯 {p1} & {p2} are unstoppable!"
+                            }
+
+                            await client.send_message(
+                                chat_id,
+                                f"🏆 <b>Achievement!</b>\n<i>{msg[value].format(p1=_mention(s), p2=_mention(ns))}</i>",
+                                parse_mode=ParseMode.HTML
+                            )
+
 
             # 2️⃣ UPDATE BATTER
             if actual_striker in match["players"]:
                 p = match["players"][actual_striker]
                 p["runs"] += runs
                 p["balls_faced"] += 1
+                # 🏏 BATTER ACHIEVEMENTS (LIVE)
+                if has_client:
+                    announced = match["announced_achievements"]["batting"].setdefault(actual_striker, set())
+
+                    for milestone in (50, 100, 150, 250):
+                        if p["runs"] >= milestone and milestone not in announced:
+                            announced.add(milestone)
+
+                            lines = {
+                                50: "{p} brings up a classy 50 🏏",
+                                100: "CENTURY 💯 {p} is on fire!",
+                                150: "150 up 😬 This is domination by {p}",
+                                250: "🚨 HISTORY 🚨 {p} smashes 250!"
+                            }
+
+                            await client.send_message(
+                                chat_id,
+                                f"🏆 <b>Achievement!</b>\n<i>{lines[milestone].format(p=_mention(actual_striker))}</i>",
+                                parse_mode=ParseMode.HTML
+                            )
+
                 if runs == 4:
                     p["fours_count"] = p.get("fours_count", 0) + 1
                 elif runs == 6:
                     p["sixes_count"] = p.get("sixes_count", 0) + 1
+                    
 
             # 3️⃣ UPDATE BOWLER
             if bowler_id in match["players"]:
@@ -288,6 +444,37 @@ async def advance_ball(match, result):
                 b = match["players"][bowler_id]
                 b["balls_bowled"] += 1
                 b["wickets"] = b.get("wickets", 0) + 1
+                # 🎯 BOWLER ACHIEVEMENTS
+                if has_client:
+                    announced = match["announced_achievements"]["bowling"].setdefault(bowler_id, set())
+
+                    if b["wickets"] in (3, 5) and b["wickets"] not in announced:
+                        announced.add(b["wickets"])
+
+                        msg = {
+                            3: "{p} picks up a 3-fer 🎯",
+                            5: "FIVE-FOR 🖐️ {p} destroys the batting!"
+                        }
+
+                        await client.send_message(
+                            chat_id,
+                            f"🏆 <b>Achievement!</b>\n<i>{msg[b['wickets']].format(p=_mention(bowler_id))}</i>",
+                            parse_mode=ParseMode.HTML
+                        )
+                        # 🎩 HAT-TRICK CHECK
+                        balls = b.get("bowling_balls", [])
+                        if has_client and len(balls) >= 3 and balls[-3:] == ["W", "W", "W"]:
+                            announced = match["announced_achievements"]["bowling"].setdefault(bowler_id, set())
+                            if "HAT" not in announced:
+                                announced.add("HAT")
+
+                                await client.send_message(
+                                    chat_id,
+                                    f"🎩 <b>HAT-TRICK!</b>\n<i>{_mention(bowler_id)} takes three in three 😱</i>",
+                                    parse_mode=ParseMode.HTML
+                                )
+
+
 
             match["current_over_balls"].append("W")
             match["total_balls"] += 1
@@ -582,7 +769,7 @@ async def advance_ball(match, result):
                 print("❌ Achievement check failed:", e)
 
             await asyncio.sleep(0.2)
-            
+
             from plugins.game.team.state import start_first_ball
             await start_first_ball(client, match)
 
@@ -601,6 +788,7 @@ async def advance_ball(match, result):
             match.get("total_balls"),
             "| prompt unlocked"
         )
+
 
 # ───────────────── END OVER ─────────────────
 async def end_over(match):
