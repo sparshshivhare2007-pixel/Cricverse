@@ -4,11 +4,9 @@ from pyrogram.enums import ParseMode
 
 from Assets.files import START_IMAGE_GROUP, SOLO_MODE_IMAGE
 from database.games import is_game_active
-from utils.decorators import group_whitelist_only
 
 
 @Client.on_message(filters.command("start") & filters.group)
-@group_whitelist_only()
 async def start_game(client, message):
     chat_id = message.chat.id
 
