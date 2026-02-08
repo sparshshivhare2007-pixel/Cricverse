@@ -6,6 +6,9 @@ import random
 from config import Config
 from database.users import add_user, total_users
 
+PLAYZONE_LINK = "https://t.me/+joF1bCfiMT9jMzVh"
+SUPPORT_LINK = "https://t.me/Nexxxxxo_bots"
+
 
 START_MOODS = [
     "🏏 𝗪𝗲𝗹𝗰𝗼𝗺𝗲, 𝗖𝗮𝗽𝘁𝗮𝗶𝗻!",
@@ -24,23 +27,21 @@ async def start_cmd(client: Client, message):
         f"{mood}\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n\n"
         f"👤 <b>{user.first_name}</b>, welcome to <b>Cricket Legacy</b> ✨\n\n"
-        "🎮 <b>Choose how you want to play</b>\n"
-        "• Solo quick matches\n"
-        "• Team battles with friends\n"
-        "• Live commentary & stats\n\n"
-        "🏆 Every run matters.\n"
-        "Every match leaves a mark.\n\n"
-        "👇 Pick a mode to begin"
+        "🏏 <b>Cricket Legacy v2</b>\n"
+        "🚧 <i>Beta Launch</i>\n\n"
+        "🎮 Play epic team matches\n"
+        "📊 Track stats & achievements\n"
+        "🎙 Live match vibes & action\n\n"
+        "🐞 Found a bug?\n"
+        "Report it in <b>PlayZone</b>\n\n"
+        "👇 Use the buttons below"
     )
 
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🏏 Solo Mode", callback_data="mode_solo"),
-                InlineKeyboardButton("👥 Team Mode", callback_data="mode_team")
-            ],
-            [
-                InlineKeyboardButton("❓ Help & Guide", callback_data="help_main")
+                InlineKeyboardButton("🧩 PlayZone", url=PLAYZONE_LINK),
+                InlineKeyboardButton("🆘 Support", url=SUPPORT_LINK)
             ],
             [
                 InlineKeyboardButton(
@@ -51,7 +52,7 @@ async def start_cmd(client: Client, message):
         ]
     )
 
-    # 🖼️ Photo → fallback to text
+    # 🖼️ Try photo first, fallback to text
     try:
         await message.reply_photo(
             photo=Config.START_IMAGE,
@@ -60,16 +61,13 @@ async def start_cmd(client: Client, message):
             reply_markup=buttons
         )
     except Exception:
-        try:
-            await message.reply_text(
-                caption,
-                parse_mode=ParseMode.HTML,
-                reply_markup=buttons
-            )
-        except Exception:
-            pass
+        await message.reply_text(
+            caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=buttons
+        )
 
-    # 📥 Log new user safely
+    # 📥 Log new user
     if is_new:
         try:
             count = await total_users()
