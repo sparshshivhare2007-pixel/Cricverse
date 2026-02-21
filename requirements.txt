@@ -1,14 +1,11 @@
 aiocron
 pymongo[srv]==4.3.3
-pymongo
 pyrofork
 TgCrypto-pyrofork
 pillow
 flask==3.0.0
 werkzeug==3.0.1
 gunicorn==20.1.0
-Jinja2==3.0.3
-itsdangerous==2.0.1
 pyrogram
 tgcrypto
 asyncpg
