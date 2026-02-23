@@ -5,11 +5,26 @@ from Assets.files import START_IMAGE_GROUP, SOLO_MODE_IMAGE
 from database.games import is_game_active
 from pyrogram.types import Message
 
+from pyrogram import filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ParseMode
+
+ALLOWED_GROUP = -1003692127639
+
 @Client.on_message(filters.command("start") & filters.group)
 async def start_game(client, message):
     chat_id = message.chat.id
 
-    # ❌ Do NOT create game here
+    # 🔒 If not allowed group → maintenance message
+    if chat_id != ALLOWED_GROUP:
+        return await message.reply_text(
+            "🚧 <b>Game Under Maintenance</b>\n\n"
+            "Please use 👉 @cricketlegacybot for now.",
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
+        )
+
+    # ✅ Normal Game Flow (only for allowed group)
     if await is_game_active(chat_id):
         return await message.reply_text(
             "⚠️ <b>Game already running</b>\nFinish it first 🏏",
@@ -37,7 +52,6 @@ async def start_game(client, message):
         parse_mode=ParseMode.HTML,
         reply_markup=buttons
     )
-
 
 
 @Client.on_callback_query(filters.regex("^mode_solo$"))
