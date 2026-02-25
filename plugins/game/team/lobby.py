@@ -1,25 +1,19 @@
-# ───────────── STANDARD LIBS ─────────────
 import asyncio
 import time
 import os
 import io
 from datetime import datetime
-from pyrogram.errors import ChatAdminRequired
 
-
-# ───────────── PYROGRAM ─────────────
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.errors import ChatAdminRequired
 
-# ───────────── IMAGE / PIL ─────────────
 from PIL import Image, ImageDraw, ImageFont
 
-# ───────────── GAME STATE / INIT ─────────────
 from plugins.game.team.init import ACTIVE_MATCHES
 from plugins.game.team.state import GROUP_COOLDOWN
 
-# ───────────── DATABASE ─────────────
 from database.connection import db
 from database.games import (
     get_active_game,
@@ -31,21 +25,18 @@ from database.games import (
     increment_shift,
 )
 
-# ───────────── ASSETS ─────────────
 from Assets.files import MEMBERS_IMAGE
 
-# ───────────── UTILS ─────────────
 from utils.permissions import host_only
 from utils.cooldown import allow
 
-# Settings
+
 MEMBERS_THUMB = "Assets/members.jpeg"
 NAME_FONT = "Assets/namefont.ttf"
 
-# --- SUPERFAST CACHING ---
-MEMBERS_THUMB_COUNTER = {}  # chat_id -> count
-AVATAR_CACHE = {}           # user_id -> {"path": path, "time": timestamp}
-CACHE_TTL = 600      
+MEMBERS_THUMB_COUNTER = {}
+AVATAR_CACHE = {}
+CACHE_TTL = 600
 
 async def ensure_user_exists(conn, user):
     await conn.execute(
