@@ -2,6 +2,9 @@ from functools import wraps
 from pyrogram.enums import ChatMemberStatus, ChatType
 from pyrogram.types import Message, CallbackQuery
 from config import Config
+from database.games import get_active_game
+from plugins.game.team.init import ACTIVE_MATCHES
+
 
 
 def admin_only(func):
@@ -83,13 +86,6 @@ def admin_only(func):
 
     return wrapper
 
-from functools import wraps
-from database.games import get_active_game
-
-
-from functools import wraps
-from plugins.game.team.init import ACTIVE_MATCHES
-from database.games import get_active_game
 
 def host_only(func):
     """
