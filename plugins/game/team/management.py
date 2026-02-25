@@ -2,7 +2,7 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
-from plugins.game.team.init import ACTIVE_MATCHES
+from plugins.game.team import ACTIVE_MATCHES
 
 # {chat_id: {"A":[], "B":[], "initiator":id, "task":asyncio.Task}}
 HOST_VOTES = {}
