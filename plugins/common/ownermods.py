@@ -17,44 +17,33 @@ from database.mods import is_mod
 OWNER_ID = 8294062042
 BOT_START_TIME = time.time()
 
-
 def uptime():
     secs = int(time.time() - BOT_START_TIME)
     h = secs // 3600
     m = (secs % 3600) // 60
     return f"{h}h {m}m"
 
-
 @Client.on_message(filters.command("fetch"))
 async def fetch_dashboard(client, message):
-    # 🔒 OWNER ONLY — SILENT IGNORE
     if message.from_user.id != OWNER_ID:
         return
 
     try:
         now = datetime.utcnow()
 
-        # ───────── USERS ─────────
         users_total = await total_users()
 
         async with db.pool.acquire() as conn:
             users_7d = await conn.fetchval(
-                """
-                SELECT COUNT(*) FROM users
-                WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
-                """
             ) or 0
 
         active_users = users_total
         inactive_users = 0
 
-        # ───────── GROUPS ─────────
         groups_total = await total_groups()
         active_groups = groups_total
         inactive_groups = 0
 
-
-        # ───────── GAMES ─────────
         async with db.pool.acquire() as conn:
             games_today = await conn.fetchval(
                 "SELECT COUNT(*) FROM games WHERE created_at::date = CURRENT_DATE"
@@ -64,11 +53,9 @@ async def fetch_dashboard(client, message):
                 "SELECT COUNT(*) FROM games"
             ) or 0
 
-        # ───────── SYSTEM ─────────
         db_status = "✅ Connected"
         bot_status = "✅ Running"
 
-        # ───────── DASHBOARD TEXT ─────────
         text = (
             "📊 <b>COMPREHENSIVE SYSTEM & BROADCAST DASHBOARD</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -118,15 +105,13 @@ async def fetch_dashboard(client, message):
             parse_mode="HTML"
         )
 
-
 @Client.on_message(filters.command("addmod"))
 async def addmod_cmd(client, message):
     if message.from_user.id != OWNER_ID:
         return
 
     args = message.text.split()
-
-    # 🎯 Resolve target
+    
     if message.reply_to_message:
         target = message.reply_to_message.from_user
         tier = int(args[1]) if len(args) > 1 else 1
@@ -153,7 +138,6 @@ async def addmod_cmd(client, message):
 
     await message.reply_text(msg)
 
-
 @Client.on_message(filters.command("rmmod"))
 async def rmmod_cmd(client, message):
     if message.from_user.id != OWNER_ID:
@@ -169,7 +153,6 @@ async def rmmod_cmd(client, message):
 
     await remove_mod(uid)
     await message.reply_text("🗑️ Mod access revoked. Back to civilian life.")
-
 
 @Client.on_message(filters.command("mods"))
 async def mods_cmd(client, message):
@@ -203,26 +186,18 @@ from database.mods import is_mod
 
 OWNER_ID = 8294062042
 
-# 🧠 Temporary in-memory broadcast cache
-# key = initiator user_id
 BROADCAST_CACHE = {}
 
-
-# ─────────────────────────────────────────────
-# 📣 BROADCAST COMMAND
-# ─────────────────────────────────────────────
 @Client.on_message(filters.command("broad"))
 async def broad_cmd(client, message):
     uid = message.from_user.id
 
-    # 🔐 Permission: Owner or Tier ≥2 Mod
     if uid != OWNER_ID and not await is_mod(uid, min_tier=2):
         return  # silent ignore
 
     text_payload = None
     source_msg = None
 
-    # 🔀 Mode detection
     if message.reply_to_message:
         source_msg = message.reply_to_message
     else:
@@ -231,13 +206,11 @@ async def broad_cmd(client, message):
             return await message.reply_text("Nothing to broadcast 🤨")
         text_payload = args[1]
 
-    # 🧠 Store ONLY actual broadcast data
     BROADCAST_CACHE[uid] = {
         "text": text_payload,
         "source_msg": source_msg
     }
 
-    # 👀 Preview UI (NEVER used for broadcast)
     preview_text = (
         "📣 <b>BROADCAST PREVIEW</b>\n\n"
         "This is exactly how it will be sent.\n"
@@ -256,7 +229,6 @@ async def broad_cmd(client, message):
         ]
     )
 
-    # 🖼 Preview render
     await client.send_message(
         chat_id=message.chat.id,
         text=preview_text,
@@ -273,12 +245,10 @@ async def broad_cmd(client, message):
             parse_mode=ParseMode.HTML
         )
 
-
 @Client.on_callback_query(filters.regex("^broad_"))
 async def broad_callback(client, cb):
     uid = cb.from_user.id
-
-    # 🔐 Permission check
+    
     if uid != OWNER_ID and not await is_mod(uid, min_tier=2):
         await cb.answer("Not for you 😌", show_alert=True)
         return
@@ -290,8 +260,7 @@ async def broad_callback(client, cb):
 
     action = cb.data
     msg = cb.message
-
-    # ❌ Cancel
+    
     if action == "broad_cancel":
         BROADCAST_CACHE.pop(uid, None)
         await msg.edit_text("❎ Broadcast cancelled.")
@@ -300,21 +269,11 @@ async def broad_callback(client, cb):
     text_payload = data["text"]
     source_msg = data["source_msg"]
 
-    # 📡 FETCH ALL TARGETS (FIXED)
     try:
         async with db.pool.acquire() as conn:
-            # 👤 All unique users (users + game_players)
             user_rows = await conn.fetch(
-                """
-                SELECT DISTINCT user_id FROM (
-                    SELECT user_id FROM users
-                    UNION
-                    SELECT user_id FROM game_players
-                ) AS all_users
-                """
             )
 
-            # 👥 Groups
             group_rows = await conn.fetch(
                 "SELECT chat_id FROM groups"
             )
@@ -341,7 +300,6 @@ async def broad_callback(client, cb):
                     parse_mode=ParseMode.HTML
                 )
 
-            # 📌 Optional pin (groups only, silently ignore failures)
             if action == "broad_send_pin":
                 try:
                     await client.pin_chat_message(tid, sent_msg.id)
@@ -355,10 +313,8 @@ async def broad_callback(client, cb):
             failed += 1
             continue
 
-    # 🧹 Cleanup
     BROADCAST_CACHE.pop(uid, None)
 
-    # ✅ Final report
     await msg.edit_text(
         f"✅ <b>Broadcast Completed</b>\n\n"
         f"📤 Sent: <b>{sent}</b>\n"
@@ -368,17 +324,14 @@ async def broad_callback(client, cb):
 
 @Client.on_message(filters.command("leave"))
 async def leave_cmd(client, message):
-    # 🔒 OWNER ONLY
     if not message.from_user or message.from_user.id != OWNER_ID:
         return
 
     target_chat_id = None
 
-    # 1️⃣ If command used inside a group
     if message.chat and message.chat.type in ("group", "supergroup"):
         target_chat_id = message.chat.id
 
-    # 2️⃣ If group id is provided
     else:
         args = message.text.split(maxsplit=1)
         if len(args) == 2:
@@ -398,7 +351,6 @@ async def leave_cmd(client, message):
             pass
         return
 
-    # 🧪 Check bot membership
     try:
         await client.get_chat_member(target_chat_id, "me")
     except Exception:
@@ -410,7 +362,6 @@ async def leave_cmd(client, message):
             pass
         return
 
-    # 👋 Goodbye message
     try:
         await client.send_message(
             target_chat_id,
@@ -426,14 +377,11 @@ async def leave_cmd(client, message):
     except Exception:
         pass
 
-
-    # 🚪 Leave group
     try:
         await client.leave_chat(target_chat_id)
     except Exception:
         pass
 
-    # ✅ Confirm to owner
     try:
         await message.reply_text(
             f"✅ Left group `{target_chat_id}` successfully.",
