@@ -91,23 +91,16 @@ async def start_cmd(client: Client, message):
 from pyrogram import Client, filters
 from database.users import add_user
 
-@Client.on_message(filters.private)
+@Client.on_message(filters.private, group=1)
 async def auto_register_user(client: Client, message):
     user = message.from_user
-
-    # Safety check
     if not user:
         return
-
-    # Silent auto-save (NO reply)
     try:
-        await add_user(
-            user.id,
-            user.first_name
-        )
+        await add_user(user.id, user.first_name)
     except Exception:
         pass
-
+        
 @Client.on_message(filters.command("help"))
 async def help_cmd(client, message):
     text = (
@@ -146,7 +139,6 @@ async def help_callback(client, cb):
         data = cb.data
         msg = cb.message
 
-        # 🔙 BACK
         if data == "help_back":
             text = (
                 "🏏 <b>Cricket Legacy</b>\n\n"
@@ -165,7 +157,6 @@ async def help_callback(client, cb):
                 ]
             )
 
-        # 🎮 HOW TO PLAY
         elif data == "help_play":
             text = (
                 "🎮 <b>How to Play</b>\n\n"
@@ -192,7 +183,6 @@ async def help_callback(client, cb):
                 [[InlineKeyboardButton("🔙 Back", callback_data="help_back")]]
             )
 
-        # 👥 TEAM MODE
         elif data == "help_team":
             text = (
                 "👥 <b>Team Play Mode</b>\n\n"
@@ -210,7 +200,6 @@ async def help_callback(client, cb):
                 [[InlineKeyboardButton("🔙 Back", callback_data="help_back")]]
             )
 
-        # 📋 COMMAND LIST
         elif data == "help_commands":
             text = (
                 "📋 <b>All Commands</b>\n\n"
