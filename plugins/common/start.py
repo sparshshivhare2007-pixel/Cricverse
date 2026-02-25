@@ -20,7 +20,6 @@ async def start_cmd(client: Client, message):
     user = message.from_user
     first_name = user.first_name or "Captain"
 
-    # ✅ Register user safely (NO /start dependency elsewhere)
     is_new = await add_user(user.id, first_name)
 
     mood = random.choice(START_MOODS)
@@ -88,8 +87,7 @@ async def start_cmd(client: Client, message):
             pass
 
 
-from pyrogram import Client, filters
-from database.users import add_user
+
 
 @Client.on_message(filters.private, group=1)
 async def auto_register_user(client: Client, message):
