@@ -18,13 +18,11 @@ def safe_mention(user):
 
 
 def sync_captain_flags(match, team):
-    """Ensure only current captain has is_captain=True"""
     captain_id = match["teams"][team].get("captain_id")
 
     for uid, pdata in match["players"].items():
         if pdata.get("team") == team:
             pdata["is_captain"] = (uid == captain_id)
-
 
 async def display_user(client, user_id):
     try:
@@ -46,7 +44,6 @@ async def get_username(client, user_id: int):
 def uname(user):
     return f"@{user.username}" if user.username else user.first_name
 
-
 @Client.on_message(filters.command("choose_cap") & filters.group)
 @host_only
 async def choose_captain(client, message):
@@ -67,14 +64,12 @@ async def choose_captain(client, message):
             game_id
         )
 
-    # ── Both captains already selected ──
     if len(captains) == 2:
         return await message.reply_text(
             "🧢 **CAPTAINS ALREADY SELECTED**\n"
             "Use /changecap to modify captains."
         )
 
-    # ── One captain selected ──
     if len(captains) == 1:
         taken = captains[0]["team"]
         remaining = "B" if taken == "A" else "A"
@@ -96,7 +91,6 @@ async def choose_captain(client, message):
             reply_markup=buttons
         )
 
-    # ── No captains selected ──
     buttons = InlineKeyboardMarkup(
         [
             [
@@ -127,7 +121,6 @@ async def set_captain(client, query):
     game_id = game["game_id"]
 
     async with db.pool.acquire() as conn:
-        # ── Player must belong to team ──
         player = await conn.fetchrow(
             "SELECT 1 FROM game_players WHERE game_id=$1 AND user_id=$2 AND team=$3",
             game_id, user.id, team
@@ -135,7 +128,6 @@ async def set_captain(client, query):
         if not player:
             return await query.answer("You are not in this team.", show_alert=True)
 
-        # ── Captain already exists ──
         existing = await conn.fetchval(
             "SELECT 1 FROM game_players WHERE game_id=$1 AND team=$2 AND is_captain=true",
             game_id, team
@@ -143,15 +135,12 @@ async def set_captain(client, query):
         if existing:
             return await query.answer("Captain already chosen for this team.", show_alert=True)
 
-        # ── Assign captain in Database ──
         await conn.execute(
             "UPDATE game_players SET is_captain=true WHERE game_id=$1 AND user_id=$2",
             game_id, user.id
         )
-
-    # ── 🔥 FULL MEMORY SYNC (THE ACTUAL FIX) ──
+        
     if match:
-        # Ensure player exists in memory
         if user.id not in match["players"]:
             match["players"][user.id] = {
                 "runs": 0,
@@ -166,26 +155,21 @@ async def set_captain(client, query):
                 "fours_count": 0,
             }
 
-        # ❗ CLEAR old captain of this team
         for uid, pdata in match["players"].items():
             if pdata.get("team") == team:
                 pdata["is_captain"] = False
 
-        # ✅ Set new captain (single source of truth)
         match["players"][user.id]["is_captain"] = True
         match["teams"].setdefault(team, {})["captain_id"] = user.id
 
-        # Cache name
         match["user_cache"][user.id] = user.first_name
 
-    # ── Fetch all captains for status check ──
     async with db.pool.acquire() as conn:
         caps = await conn.fetch(
             "SELECT team, user_id FROM game_players WHERE game_id=$1 AND is_captain=true",
             game_id
         )
 
-    # ── Only one captain selected ──
     if len(caps) == 1:
         remaining = "B" if team == "A" else "A"
         buttons = InlineKeyboardMarkup(
@@ -205,7 +189,6 @@ async def set_captain(client, query):
             parse_mode=ParseMode.HTML
         )
 
-    # ── BOTH captains selected ──
     capA = next(c for c in caps if c["team"] == "A")
     capB = next(c for c in caps if c["team"] == "B")
 
@@ -222,7 +205,6 @@ async def set_captain(client, query):
         parse_mode=ParseMode.HTML
     )
 
-    # ✅ START TOSS
     await send_toss(client, chat_id, game_id)
 
 async def send_toss(client, chat_id, game_id):
@@ -241,10 +223,6 @@ async def send_toss(client, chat_id, game_id):
         "Choose wisely • Head or Tails decides the fate",
         reply_markup=buttons
     )
-
-
-    # Helper to display user mention safely
-
 
 import random
 
@@ -339,7 +317,6 @@ async def decide_play(client, query):
     decision = query.data.split("_")[1] # 'bat' or 'bowl'
     match = ACTIVE_MATCHES.get(chat_id)
 
-    # 1. Fetch the LATEST data from DB
     async with db.pool.acquire() as conn:
         game = await conn.fetchrow(
             "SELECT game_id, toss_winner FROM games WHERE chat_id=$1 AND status='active'",
@@ -351,14 +328,12 @@ async def decide_play(client, query):
 
         game_id = game["game_id"]
 
-        # 2. STRICT CHECK: Compare user.id with the toss_winner column
         if game["toss_winner"] != user.id:
             return await query.answer(
                 f"⛔ Only the toss winner can decide!", 
                 show_alert=True
             )
 
-        # 3. Get the Captain's Team
         cap = await conn.fetchrow(
             "SELECT team FROM game_players WHERE game_id=$1 AND user_id=$2 AND is_captain=true",
             game_id, user.id
@@ -367,14 +342,12 @@ async def decide_play(client, query):
         if not cap:
             return await query.answer("Error: Captain team data not found.", show_alert=True)
 
-        # 4. Logic for Batting/Bowling Assignment
         my_team = cap["team"]
         other_team = "B" if my_team == "A" else "A"
 
         batting = my_team if decision == "bat" else other_team
         bowling = other_team if decision == "bat" else my_team
 
-        # 5. Update Database Phase
         await conn.execute(
             """
             UPDATE games
@@ -384,13 +357,11 @@ async def decide_play(client, query):
             batting, bowling, game_id
         )
 
-    # 🚀 6. SYNC TO LIVE MEMORY (CRITICAL FIX)
     if match:
         match["batting_team"] = batting
         match["bowling_team"] = bowling
         match["phase"] = "overs_setup"
 
-    # 7. UI Updates
     await query.message.edit_text(
         f"📢 <b>DECISION LOCKED</b>\n"
         f"────┈┄┄╌╌╌╌┄┄┈────\n"
@@ -419,20 +390,17 @@ async def set_overs(client, message):
     if not game:
         return await message.reply_text("❌ **No active game found.**")
 
-    # ── Toss must be completed ──
     if not game.get("batting_team"):
         return await message.reply_text(
             "🪙 **Toss not completed yet.**\n"
             "Finish the toss before setting overs."
         )
-
-    # ── Overs already set ──
+        
     if game.get("overs"):
         return await message.reply_text(
             f"📊 **Overs already set:** `{game['overs']}`"
         )
 
-    # ── Build buttons (1–20, 4 per row) ──
     buttons = []
     row = []
 
@@ -472,17 +440,14 @@ async def overs_callback(client, query):
     if game.get("overs"):
         return await query.answer("Overs already locked.", show_alert=True)
 
-    # 1. Update Database
     async with db.pool.acquire() as conn:
         await conn.execute(
             "UPDATE games SET overs=$1 WHERE game_id=$2",
             overs, game["game_id"]
         )
 
-    # 🚀 2. CRITICAL FIX: Sync the Memory Object
     if chat_id in ACTIVE_MATCHES:
         ACTIVE_MATCHES[chat_id]["overs"] = overs
-        # Ensure the phase is ready for play
         ACTIVE_MATCHES[chat_id]["phase"] = "LIVE" 
 
     await query.message.edit_text(
@@ -499,14 +464,12 @@ async def overs_callback(client, query):
 
     cap_map = {c["team"]: c["user_id"] for c in caps}
 
-    # 🚀 FIX: Safety check for cap_map keys
     bat_team = game["batting_team"]
     bowl_team = game["bowling_team"]
 
     bat_cap_user = await client.get_users(cap_map[bat_team])
     bowl_cap_user = await client.get_users(cap_map[bowl_team])
 
-    # 🚀 FIX: Escaping <number> to &lt;number&gt; to prevent EntityBoundsInvalid crash
     await client.send_message(
         chat_id,
         (
@@ -521,7 +484,6 @@ async def overs_callback(client, query):
         parse_mode=ParseMode.HTML
     )
 
-
 import asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
@@ -532,7 +494,6 @@ async def set_batting(client, message):
     user = message.from_user
     args = message.text.strip().split(maxsplit=1)
 
-    # 1️⃣ Input Validation
     if len(args) != 2 or not args[1].isdigit():
         return await message.reply_text(
             "❓ <b>Usage:</b> <code>/batting &lt;num&gt;</code>",
@@ -547,7 +508,6 @@ async def set_batting(client, message):
             parse_mode=ParseMode.HTML
         )
 
-    # 🚫 ✅ FIX: Overs must be set BEFORE batting
     if not game.get("overs"):
         return await message.reply_text(
             "⛔ <b>Overs not set yet!</b>\n\n"
@@ -560,7 +520,6 @@ async def set_batting(client, message):
     batting_team = game["batting_team"]
     match = ACTIVE_MATCHES.get(chat_id)
 
-    # 2️⃣ Read Data & Permissions
     async with db.pool.acquire() as conn:
         players = await conn.fetch(
             "SELECT user_id, is_out, is_captain FROM game_players "
@@ -568,7 +527,6 @@ async def set_batting(client, message):
             game_id, batting_team
         )
 
-        # Permission Check
         is_cap = any(p['user_id'] == user.id and p['is_captain'] for p in players)
         if user.id != game["host_id"] and not is_cap:
             return await message.reply_text(
@@ -581,7 +539,6 @@ async def set_batting(client, message):
 
         selected_id = players[idx]["user_id"]
 
-        # Player Validations
         if players[idx]["is_out"] or (
             match and match.get("players", {}).get(selected_id, {}).get("is_out")
         ):
@@ -594,10 +551,8 @@ async def set_batting(client, message):
                 "⚠️ <b>Already batting!</b><br>No cloning allowed 🧬"
             )
 
-        # Determine Role
         role = "striker" if match.get("striker") is None else "non_striker"
 
-    # 3️⃣ ⚡ Lightning Update: Background Write
     async def background_db_update():
         async with db.pool.acquire() as bg_conn:
             await bg_conn.execute(
@@ -607,7 +562,6 @@ async def set_batting(client, message):
 
     asyncio.create_task(background_db_update())
 
-    # 4️⃣ Sync Memory & Cache
     try:
         player_obj = await client.get_users(selected_id)
         mention = f"<a href='tg://user?id={selected_id}'>{player_obj.first_name}</a>"
@@ -627,8 +581,7 @@ async def set_batting(client, message):
             "team": batting_team,
             "is_out": False
         })
-
-    # 5️⃣ Response Logic (UNCHANGED)
+        
     if role == "striker" and match.get("non_striker") is None:
         return await message.reply_text(
             f"🏏 <b>STRIKER LOCKED 🔒</b> {mention} takes the strike.\n"
@@ -637,7 +590,6 @@ async def set_batting(client, message):
             parse_mode=ParseMode.HTML
         )
 
-    # If both batters are now set
     if match.get("striker") and match.get("non_striker"):
         # CASE A: Mid-innings Wicket Replacement
         if match.get("total_balls", 0) > 0:
@@ -659,7 +611,6 @@ async def set_batting(client, message):
                     parse_mode=ParseMode.HTML
                 )
 
-        # CASE B: Start of Innings
         else:
             match["phase"] = "READY"
             match["current_bowler"] = None
@@ -678,7 +629,6 @@ async def set_batting(client, message):
                 ),
                 parse_mode=ParseMode.HTML
             )
-
 
 import asyncio
 from pyrogram import Client, filters
@@ -707,7 +657,6 @@ async def set_bowler(client, message):
     batting_team = game["batting_team"] 
     match = ACTIVE_MATCHES.get(chat_id)
 
-    # ⚡ LIGHTNING FETCH: Safe Parallel Execution
     try:
         batters, bowling_players, team_a_rows, team_b_rows = await asyncio.gather(
             safe_fetch(
@@ -736,7 +685,6 @@ async def set_bowler(client, message):
             parse_mode=ParseMode.HTML
         )
 
-    # 1️⃣ BATTER CHECK: Ensure openers are set correctly in DB
     striker_id = next((p["user_id"] for p in batters if p["role"] == "striker"), None)
     non_striker_id = next((p["user_id"] for p in batters if p["role"] == "non_striker"), None)
 
@@ -746,18 +694,15 @@ async def set_bowler(client, message):
             parse_mode=ParseMode.HTML
         )
 
-    # 2️⃣ PERMISSION CHECK
     is_cap_or_host = (user.id == game["host_id"]) or any(p["user_id"] == user.id and p["is_captain"] for p in bowling_players)
     if not is_cap_or_host:
         return await message.reply_text("🚫 <b>Captain or Host only.</b><br>Everyone else — grab popcorn 🍿", parse_mode=ParseMode.HTML)
 
-    # 3️⃣ TARGET BOWLER VALIDATION
     if idx < 0 or idx >= len(bowling_players):
         return await message.reply_text("❌ <b>Wrong number.</b><br> Count again… slowly 😅", parse_mode=ParseMode.HTML)
 
     bowler_id = bowling_players[idx]["user_id"]
 
-    # 4️⃣ ACTIVE/ROTATION CHECK
     if match:
         if match.get("current_bowler"):
             return await message.reply_text("⚾ <b>Ball already in hand.</b><br> Let this over finish first 👀", parse_mode=ParseMode.HTML)
@@ -765,7 +710,6 @@ async def set_bowler(client, message):
             last_name = match.get("last_over_bowler_name", "The previous bowler")
             return await message.reply_text(f"🚫 <b>No back-to-back overs!</b><br> {last_name} needs a breather 😤", parse_mode=ParseMode.HTML)
 
-    # 5️⃣ EXECUTION & SYNC
     try:
         bowler_user = await client.get_users(bowler_id)
     except Exception:
@@ -774,7 +718,6 @@ async def set_bowler(client, message):
     team_data = {"A": [r["user_id"] for r in team_a_rows], "B": [r["user_id"] for r in team_b_rows]}
 
     if match:
-        # 🔐 CLIENT PERSISTENCE (CRITICAL)
         if client:
             match["client"] = client
             print(f"🟢 client stored in match for chat {chat_id}")
@@ -785,7 +728,6 @@ async def set_bowler(client, message):
             "current_bowler": bowler_id,
             "phase": "LIVE"
         })
-
 
         match["user_cache"][bowler_id] = bowler_user.first_name 
 
@@ -801,7 +743,6 @@ async def set_bowler(client, message):
         asyncio.create_task(start_first_ball(client, match))
 
     else:
-        # INITIAL START OF MATCH
         from plugins.game.team.init import init_match
         await message.reply_text(f"⚾ <b>{bowler_user.first_name}</b> takes the opening over.")
 
