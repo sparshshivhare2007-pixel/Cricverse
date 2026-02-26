@@ -15,34 +15,24 @@ async def head2head_cmd(client, message):
     args = message.command[1:]
     users = []
 
-    # ───────── USER RESOLUTION ─────────
     try:
         if message.reply_to_message and message.reply_to_message.from_user:
             users = [message.from_user, message.reply_to_message.from_user]
-
         elif len(args) == 1:
             u2 = await client.get_users(args[0])
             users = [message.from_user, u2]
-
         elif len(args) >= 2:
             u1 = await client.get_users(args[0])
             u2 = await client.get_users(args[1])
             users = [u1, u2]
-
         else:
-            return await message.reply_text(
-                "❌ Use `/compare @user` or reply to someone",
-                parse_mode=ParseMode.HTML
-            )
+            return await message.reply_text("❌ Use `/compare @user` or reply to someone", parse_mode=ParseMode.HTML)
     except Exception:
-        return await message.reply_text(
-            "❌ Invalid user(s). Try username or user_id."
-        )
+        return await message.reply_text("❌ Invalid user(s). Try username or user_id.")
 
     u1, u2 = users
     uid1, uid2 = u1.id, u2.id
 
-    # ───────── SEARCH ANIMATION ─────────
     loading = await message.reply_text("🔍 Initializing comparison…")
     for frame in SEARCH_FRAMES:
         await asyncio.sleep(0.6)
@@ -51,19 +41,15 @@ async def head2head_cmd(client, message):
         except:
             pass
 
-    # ───────── FETCH STATS ─────────
     async with db.pool.acquire() as conn:
         s1 = await conn.fetchrow("SELECT * FROM user_stats WHERE user_id=$1", uid1)
         s2 = await conn.fetchrow("SELECT * FROM user_stats WHERE user_id=$1", uid2)
 
     if not s1 or not s2:
-        return await loading.edit_text(
-            "⚠️ One or both players have no stats yet.\nAsk them to play some matches 🏏"
-        )
+        return await loading.edit_text("⚠️ One or both players have no stats yet.\nAsk them to play some matches 🏏")
 
     def safe(v): return v or 0
 
-    # ───────── METRICS ─────────
     def batting_avg(s):
         outs = max(1, s["matches"] - safe(s.get("not_outs")))
         return s["runs"] / outs
@@ -108,7 +94,6 @@ async def head2head_cmd(client, message):
 
         lines.append(f"• {name:<14}:  {val1}  {'>' if mark=='✅' else '<' if mark=='❌' else '='}  {val2}  {mark}")
 
-    # ───────── VERDICT ─────────
     if score1 > score2:
         verdict = f"{u1.first_name} dominates overall —\n{u2.first_name} needs a comeback arc 😤"
     elif score2 > score1:
@@ -116,7 +101,6 @@ async def head2head_cmd(client, message):
     else:
         verdict = "Too close to call — this rivalry is 🔥"
 
-    # ───────── FINAL TEXT ─────────
     text = (
         "⚔️ <b>𝗛𝗘𝗔𝗗 𝗧𝗢 𝗛𝗘𝗔𝗗 𝗔𝗡𝗔𝗟𝗬𝗦𝗜𝗦</b>\n\n"
         f"👤 {u1.first_name}  <b>{score1}</b> 🆚 <b>{score2}</b>  👤 {u2.first_name}\n"
@@ -129,5 +113,4 @@ async def head2head_cmd(client, message):
     )
 
     await loading.edit_text(text, parse_mode=ParseMode.HTML)
-
-
+    
