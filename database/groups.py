@@ -16,7 +16,6 @@ async def add_group(chat_id: int, title: str) -> bool:
         )
         return True
 
-
 async def total_groups() -> int:
     async with db.pool.acquire() as conn:
         return await conn.fetchval("SELECT COUNT(*) FROM groups")
