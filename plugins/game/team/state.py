@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from pyrogram.enums import ParseMode
 
 from Assets.files import RUN_VIDEOS
@@ -16,42 +16,52 @@ def get_mention(match, user_id):
     name = match.get("user_cache", {}).get(user_id, "Player")
     return f'<a href="tg://user?id={user_id}">{name}</a>'
 
-async def send_result_visuals(client, chat_id, key, caption):
+async def try_send_video(client, chat_id, key, caption, reply_markup=None):
+    video_list = RUN_VIDEOS.get(str(key), [])
+    if not video_list:
+        return await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+    file_id = random.choice(video_list)
+    if not file_id or file_id.startswith("FILE_ID"):
+        return await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
     try:
-        videos = RUN_VIDEOS.get(str(key))
-        if not videos:
-            raise ValueError(f"No visuals found for result: {key}")
-
-        file_id = random.choice(videos)
-
-        try:
-            await client.send_video(
-                chat_id, 
-                video=file_id, 
-                caption=caption, 
-                parse_mode=ParseMode.HTML
-            )
-        except Exception:
-            await client.send_animation(
-                chat_id, 
-                animation=file_id, 
-                caption=caption, 
-                parse_mode=ParseMode.HTML
-            )
+        return await client.send_video(
+            chat_id=chat_id,
+            video=file_id,
+            caption=caption,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.HTML
+        )
     except Exception as e:
-        print(f"Visual Error: {e}")
-        await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML)
+        err = str(e).upper()
+        if "ANIMATION" in err or "CONTENT_TYPE" in err or "VIDEO_CONTENT_REQUIRED" in err:
+            try:
+                return await client.send_animation(
+                    chat_id=chat_id,
+                    animation=file_id,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception as anim_e:
+                print(f"❌ Both media types failed: {anim_e}")
+
+        return await client.send_message(
+            chat_id=chat_id,
+            text=caption,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.HTML
+        )
+
+async def send_result_visuals(client, chat_id, key, caption):
+    await try_send_video(client, chat_id, key, caption)
 
 def get_display_ball_no(match):
     balls_bowled = len(match.get("current_over_balls", []))
     return min(balls_bowled + 1, 6)
 
-import asyncio
-from pyrogram.enums import ParseMode
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
 async def start_first_ball(client, match):
-
     if match.get("prompt_dispatched"):
         return
     match["prompt_dispatched"] = True
@@ -124,7 +134,6 @@ async def start_first_ball(client, match):
         f"🔢 Bowler, check your PM to deliver!"
     )
 
-    from plugins.game.team.state import try_send_video
     try:
         await try_send_video(client, chat_id, "Bowling", caption, group_btn)
     except Exception as e:
@@ -158,12 +167,11 @@ async def start_first_ball(client, match):
     if t_data.get("task") and not t_data["task"].done():
         t_data["task"].cancel()
 
-    from plugins.game.team.state import start_timer
     match["timeouts"]["bowler"]["task"] = asyncio.create_task(
         start_timer(match, "bowler")
     )
 
-@Client.on_message(filters.private & filters.text)
+@Client.on_message(filters.private & filters.regex("^[1-6]$"), group=1)
 async def bowler_dm_handler(client, message):
     uid = message.from_user.id
 
@@ -174,12 +182,6 @@ async def bowler_dm_handler(client, message):
 
     if not match or match.get("phase") != "LIVE" or match.get("bowled"):
         return
-
-    if not message.text.isdigit() or not (1 <= int(message.text) <= 6):
-        return await message.reply_text(
-            "❗ <b>Invalid delivery.</b>\nSend a number between <b>1 and 6</b>.",
-            parse_mode=ParseMode.HTML
-        )
 
     match["last_bowl"] = int(message.text)
     match["bowled"] = True
@@ -232,8 +234,6 @@ async def bowler_dm_handler(client, message):
         f"send your shot (0–6) in the group!"
     )
 
-    from plugins.game.team.state import try_send_video, start_timer
-
     asyncio.create_task(
         try_send_video(client, chat_id, "Batting", caption)
     )
@@ -249,12 +249,7 @@ async def bowler_dm_handler(client, message):
         start_timer(match, "batter")
     )
 
-import random
-import asyncio
-from pyrogram import Client, filters
-from pyrogram.types import Message
-
-@Client.on_message(filters.group & filters.text, group=1)
+@Client.on_message(filters.group & filters.regex("^[0-6]$"), group=1)
 async def batter_handler(client, message):
     uid = message.from_user.id
     chat_id = message.chat.id
@@ -270,9 +265,6 @@ async def batter_handler(client, message):
         return
 
     if uid != match.get("striker"):
-        return
-
-    if not message.text.isdigit() or not (0 <= int(message.text) <= 6):
         return
 
     bat_num = int(message.text)
@@ -308,9 +300,6 @@ async def batter_handler(client, message):
             t.cancel()
         except:
             pass
-
-    from plugins.game.team.state import try_send_video
-    from plugins.game.team.over_engine import advance_ball
 
     is_out = (bat_num == bowl_num)
     runs = 0 if bat_num == 0 else bat_num
@@ -354,14 +343,12 @@ async def batter_handler(client, message):
                 "That ball deserves a refund.",
                 "Momentum paused. Completely.",
                 "Silence louder than crowd noise.",
-
                 "Solid defensive technique on display.",
                 "Good line respected by the batter.",
                 "No scoring opportunity created.",
                 "Bowler wins that mini battle.",
                 "Textbook block.",
                 "Correct shot for the situation.",
-
                 "Scoreboard unchanged. Ego unchanged.",
                 "That was cricket ASMR.",
                 "Ball met bat. Nothing else happened.",
@@ -389,11 +376,9 @@ async def batter_handler(client, message):
                 "Minimal risk, maximum sense.",
                 "Strike rotated successfully.",
                 "Game awareness on point.",
-
                 "One run and a long breath.",
                 "Not pretty, but it works.",
                 "Survival mode activated.",
-
                 "Good placement into the gap.",
                 "Rotates strike nicely.",
                 "Keeps pressure manageable."
@@ -420,10 +405,8 @@ async def batter_handler(client, message):
                 "Two runs without fuss.",
                 "Pressure released slightly.",
                 "Ground fielding exposed.",
-
                 "Fielding standards questioned.",
                 "That gap was illegal.",
-
                 "Excellent shot selection.",
                 "Perfect use of the field."
             ],
@@ -449,10 +432,8 @@ async def batter_handler(client, message):
                 "Pure adrenaline.",
                 "That was brave.",
                 "Almost disaster!",
-
                 "One bad throw and it was over.",
                 "Bowler aged 5 years.",
-
                 "Excellent commitment between wickets.",
                 "High-risk, high-reward running."
             ],
@@ -478,10 +459,8 @@ async def batter_handler(client, message):
                 "Timing > power.",
                 "Bowler loses length.",
                 "Confidence booster!",
-
                 "Bowler absolutely cooked.",
                 "That gap was personal.",
-
                 "Exquisite timing and placement.",
                 "Classic cricketing shot."
             ],
@@ -507,10 +486,8 @@ async def batter_handler(client, message):
                 "Crowd laughing hard.",
                 "Chaos unlocked.",
                 "Defensive drills incoming.",
-
                 "That was illegal fielding.",
                 "Someone getting benched.",
-
                 "Capitalized on fielding errors.",
                 "Awareness to keep running."
             ],
@@ -536,15 +513,12 @@ async def batter_handler(client, message):
                 "No doubts, no drama.",
                 "Bowler looks at the sky.",
                 "Momentum completely flipped.",
-
                 "Bowler needs therapy.",
                 "That landed in another district.",
-
                 "Perfect swing, perfect connection.",
                 "Clean striking at its best."
             ]
         }
-
 
         caption = (
             f"🏏 <b>{runs} Run(s)!</b>\n"
@@ -557,44 +531,6 @@ async def batter_handler(client, message):
 
         await advance_ball(match, runs)
 
-async def try_send_video(client, chat_id, key, caption, reply_markup=None):
-    video_list = RUN_VIDEOS.get(str(key), [])
-    if not video_list:
-        return await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML)
-
-    file_id = random.choice(video_list)
-    if not file_id or file_id.startswith("FILE_ID"):
-        return await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML)
-
-    try:
-        return await client.send_video(
-            chat_id=chat_id,
-            video=file_id,
-            caption=caption,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.HTML
-        )
-    except Exception as e:
-        err = str(e).upper()
-        if "ANIMATION" in err or "CONTENT_TYPE" in err or "VIDEO_CONTENT_REQUIRED" in err:
-            try:
-                return await client.send_animation(
-                    chat_id=chat_id,
-                    animation=file_id,
-                    caption=caption,
-                    reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML
-                )
-            except Exception as anim_e:
-                print(f"❌ Both media types failed: {anim_e}")
-
-        return await client.send_message(
-            chat_id=chat_id,
-            text=caption,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.HTML
-        )
-
 @Client.on_message(filters.command(["score", "userinfo", "graph"]) & filters.group, group=-1)
 async def check_cooldown(client, message):
     chat_id = message.chat.id
@@ -605,3 +541,4 @@ async def check_cooldown(client, message):
             await message.reply_text(f"⏳ **Slow down!** Try again after {int(10 - diff)}s.")
             await message.stop_propagation()
     GROUP_COOLDOWN[chat_id] = now
+        
