@@ -1,9 +1,9 @@
+import time
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.enums import ParseMode
 from plugins.game.team import ACTIVE_MATCHES
 from plugins.game.team.scorecard import build_score_image, build_score_caption
-import time
 
 SCORE_COOLDOWN = {}
 
@@ -17,8 +17,10 @@ async def score_cmd(client, message: Message):
 
     match = ACTIVE_MATCHES.get(chat_id)
     if not match:
-        return await message.reply_text("😴 <b>It’s quiet out there.</b>\nNo match running right now. start now with /start"
-, parse_mode=ParseMode.HTML)
+        return await message.reply_text(
+            "😴 <b>It’s quiet out there.</b>\nNo match running right now. Start now with /start", 
+            parse_mode=ParseMode.HTML
+        )
 
     if not match.get("client"):
         match["client"] = client
@@ -35,7 +37,7 @@ async def score_cmd(client, message: Message):
         match["bowling_team"] = "B" if bat_team == "A" else "A"
 
     if not match.get("striker") or not match.get("non_striker"):
-         return await message.reply_text("⏳ <b>Hold on!</b> Batters are being picked.")
+         return await message.reply_text("⏳ <b>Hold on!</b> Batters are being picked.", parse_mode=ParseMode.HTML)
 
     SCORE_COOLDOWN[chat_id] = current_time
 
@@ -50,9 +52,8 @@ async def score_cmd(client, message: Message):
 
         bat_team_stats = team_data[bat_team]
         balls = bat_team_stats.get("balls", 0)
-        p_balls_total = match.get("partnership_balls", 0)
-        actual_balls = max(balls, p_balls_total) 
-        overs_str = f"{actual_balls//6}.{actual_balls%6}"
+        
+        overs_str = f"{balls // 6}.{balls % 6}"
 
         def get_score(t_key):
             t = team_data.get(t_key, {"runs": 0, "wickets": 0})
@@ -84,10 +85,10 @@ async def score_cmd(client, message: Message):
         try:
             host_name = match.get("host_name", "Host")
             caption = build_score_caption(match, host_name)
-            await message.reply_text(f"📊 <b>Score Update (Text Mode):</b>\n\n{caption}")
+            await message.reply_text(f"📊 <b>Score Update (Text Mode):</b>\n\n{caption}", parse_mode=ParseMode.HTML)
         except Exception as inner_e:
             print(f"Critical Scorecard Failure: {inner_e}")
-            await message.reply_text("❌ <b>Scorecard Sync Error. Please bowl one ball to re-initialize game state.</b>")
+            await message.reply_text("❌ <b>Scorecard Sync Error. Please bowl one ball to re-initialize game state.</b>", parse_mode=ParseMode.HTML)
 
 @Client.on_message(filters.command("testfinal"))
 async def test_final_scorecard(client, message):
