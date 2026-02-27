@@ -12,8 +12,9 @@ def allow(key: str, seconds: int) -> bool:
     COOLDOWN[key] = now
 
     if len(COOLDOWN) > 5000:
-        for k, v in list(COOLDOWN.items()):
-            if now - v > seconds * 2:
-                COOLDOWN.pop(k, None)
+        expired_keys = [k for k, v in COOLDOWN.items() if now - v > seconds * 2]
+        for k in expired_keys:
+            COOLDOWN.pop(k, None)
 
     return True
+    
