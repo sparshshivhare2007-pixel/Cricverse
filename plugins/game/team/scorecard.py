@@ -4,24 +4,19 @@ import os
 import io
 from PIL import Image, ImageDraw, ImageFont
 
-# ───────────────── CONFIGURATION ─────────────────
 SCORE_BG = "Assets/score.jpeg"
 FONT_PATH = "Assets/fonts.ttf"
-MAIN_SIZE = 110      # Score size
-LABEL_SIZE = 40      # Target size
-INFO_SIZE = 55       # Overs size
-
-# ───────────────── IMAGE GENERATOR ─────────────────
+MAIN_SIZE = 110  
+LABEL_SIZE = 40    
+INFO_SIZE = 55    
 
 def build_score_image(match_data):
     """
     ULTIMATE FIX: Standardizes coordinates, applies purple text color,
     recovers background gracefully if missing, and ensures buffer return.
     """
-    # 1. Background Initialization with Error Recovery
     try:
         if not os.path.exists(SCORE_BG):
-            # Creates a dark-themed fallback if the JPEG is missing
             img = Image.new("RGBA", (1280, 720), color=(20, 24, 35, 255)) 
         else:
             img = Image.open(SCORE_BG).convert("RGBA")
@@ -30,13 +25,11 @@ def build_score_image(match_data):
 
     draw = ImageDraw.Draw(img)
 
-    # 2. Font Loading (Safe Handling)
     try:
         font_main = ImageFont.truetype(FONT_PATH, MAIN_SIZE)
         font_sub = ImageFont.truetype(FONT_PATH, LABEL_SIZE)
         font_info = ImageFont.truetype(FONT_PATH, INFO_SIZE)
     except Exception:
-        # Prevents crash if font file is corrupted or missing
         font_main = font_sub = font_info = ImageFont.load_default()
 
     def draw_centered_text(text, font, x, y, fill="white", stroke_fill=None, stroke_width=0):
@@ -46,54 +39,42 @@ def build_score_image(match_data):
         draw.text((x - w/2, y - h/2), str(text), font=font, fill=fill, 
                   stroke_width=stroke_width, stroke_fill=stroke_fill)
 
-    # 3. YTB (Yet To Bat) & Score Logic
     score_a = str(match_data.get("score_a", "0/0"))
     score_b = str(match_data.get("score_b", "0/0"))
 
-    # Logic to show which team is yet to bat during Innings 1
     if match_data.get('innings', 1) == 1:
         if match_data.get('batting_team') == "A":
             score_b = "YTB"
         else:
             score_a = "YTB"
 
-    # 4. Positions, Alignment and Colors
     center_x = 640
 
-    # Team A (Left Slot): Adjusted per requirement
     left_slot_x = 450  
     left_slot_y = 370  
 
-    # Team B (Right Slot): Adjusted per requirement
     right_slot_x = 980  
     right_slot_y = 370  
 
     y_overs = 580  
     y_target = 650
 
-    # Text Color Setting
-    text_purple = "#8A2BE2" # BlueViolet
+    text_purple = "#8A2BE2"
 
-    # Draw Primary Scores
     draw_centered_text(score_a, font_main, left_slot_x, left_slot_y, fill=text_purple, stroke_width=2, stroke_fill="black")
     draw_centered_text(score_b, font_main, right_slot_x, right_slot_y, fill=text_purple, stroke_width=2, stroke_fill="black")
 
-    # Draw Overs Metadata
     overs_txt = f"OVERS: {match_data.get('overs', '0.0')} / {match_data.get('max_overs', '0')}"
     draw_centered_text(overs_txt, font_info, center_x, y_overs, fill="#00FFCC")
 
-    # Draw Target Info (Second Innings Only)
     if match_data.get('innings') == 2 and match_data.get('target'):
         target_txt = f"TARGET: {match_data['target']}"
         draw_centered_text(target_txt, font_sub, center_x, y_target, fill="#FF4444")
 
-    # 5. Export to Buffer
     buf = io.BytesIO()
-    # JPEG doesn't support alpha, so convert to RGB
     img.convert("RGB").save(buf, format="JPEG", quality=95)
     buf.seek(0)
 
-    # Clean up memory
     img.close()
 
     return buf
@@ -105,8 +86,7 @@ def build_score_caption(match, host_name):
     - Adds intelligence & broadcast-level insights
     - Safe against crashes
     """
-
-    # ───────── BASIC DATA ─────────
+    
     bat = match.get("batting_team", "A")
     bowl = match.get("bowling_team", "B")
 
@@ -124,7 +104,6 @@ def build_score_caption(match, host_name):
     players = match.get("players", {})
     user_cache = match.get("user_cache", {})
 
-    # ───────── HEADER ─────────
     text = (
         f"╾ ⏳ <b>Total Overs:</b> {match.get('overs', 0)}\n"
         f"╾ 📯 <b>Host:</b> {host_name}\n"
@@ -132,7 +111,6 @@ def build_score_caption(match, host_name):
         f"<b>🏏 Batting: Team {bat}</b>\n\n"
     )
 
-    # ───────── BATTERS ─────────
     s_id = match.get("striker")
     ns_id = match.get("non_striker")
 
@@ -158,13 +136,11 @@ def build_score_caption(match, host_name):
 
         text += f"✧ {name} = {p_runs}({p_balls}){star}{form}\n╰⊚ (SR: {sr})\n"
 
-    # ───────── PARTNERSHIP ─────────
     if match.get("partnership") or match.get("partnership_balls"):
         text += f"🤝 <b>Partnership:</b> {match.get('partnership',0)}({match.get('partnership_balls',0)})\n"
 
     text += "────┈┄┄╌╌╌╌┄┄┈────\n"
 
-    # ───────── BOWLER & OVER ─────────
     bowler_uid = match.get("current_bowler")
     if bowler_uid:
         b_name = user_cache.get(bowler_uid, "Bowler")
@@ -185,19 +161,16 @@ def build_score_caption(match, host_name):
             "────┈┄┄╌╌╌╌┄┄┈────\n"
         )
 
-    # ───────── SCORE LINE ─────────
     text += (
         f"👥 <b>Total Score:</b> {runs}/{wickets} ({overs_formatted} ov)\n"
         f"╰⊚ <b>CRR:</b> {crr}\n"
     )
-
-    # ───────── DOT BALL PRESSURE ─────────
+    
     dots = bat_team.get("over_history", []).count(0)
     if actual_balls:
         dot_pct = int((dots / actual_balls) * 100)
         text += f"🧱 <b>Dot Balls:</b> {dots} ({dot_pct}%)\n"
 
-    # ───────── MOMENTUM ─────────
     recent = bat_team.get("over_history", [])[-12:]
     recent_runs = sum(x for x in recent if isinstance(x, int))
     recent_wkts = recent.count("W")
@@ -211,7 +184,6 @@ def build_score_caption(match, host_name):
 
     text += f"📊 <b>Momentum:</b> {momentum}\n"
 
-    # ───────── CHASE LOGIC ─────────
     if match.get("innings") == 2:
         text += "⊱⋅ ──────────── ⋅⊰\n"
 
@@ -234,7 +206,6 @@ def build_score_caption(match, host_name):
 
         text += "<i>⚠️ Required rate rising</i>\n" if rrr > crr else "<i>✅ Chase under control</i>\n"
 
-    # ───────── FOOTER ─────────
     footer = (
         "ℹ️ Early wickets can flip the game."
         if match.get("innings") == 1
@@ -245,13 +216,11 @@ def build_score_caption(match, host_name):
 
     return text
 
-
 def build_final_summary_image(match_data):
     """
     Renders the final match summary with top performers using custom name fonts.
     Layout: Team Scores at top, Boxes for Best Batsman/Bowler, and Winner at bottom.
     """
-    # 1. Background Setup
     if not os.path.exists(SCORE_BG):
         img = Image.new("RGBA", (1280, 1000), color=(20, 24, 35, 255))
     else:
@@ -259,16 +228,13 @@ def build_final_summary_image(match_data):
 
     draw = ImageDraw.Draw(img)
 
-    # 2. Font Loading Logic
-    # Paths for your specific name fonts
     NAME_FONTS = ["Assets/namefont.ttf"]
 
     try:
-        font_lg = ImageFont.truetype(FONT_PATH, 90)  # Main Titles
-        font_md = ImageFont.truetype(FONT_PATH, 45)  # Box Titles
-        font_sm = ImageFont.truetype(FONT_PATH, 32)  # Stats text
+        font_lg = ImageFont.truetype(FONT_PATH, 90) 
+        font_md = ImageFont.truetype(FONT_PATH, 45)  
+        font_sm = ImageFont.truetype(FONT_PATH, 32) 
 
-        # Load the first available custom name font, fallback to FONT_PATH if missing
         font_name = None
         for path in NAME_FONTS:
             if os.path.exists(path):
@@ -281,34 +247,25 @@ def build_final_summary_image(match_data):
         print(f"Font Load Error: {e}")
         font_lg = font_md = font_sm = font_name = ImageFont.load_default()
 
-    # 3. Enhanced Box Drawing Function
     def draw_box(x, y, w, h, title, player_name, stats_list, color):
         """Draws box with specialized font for the player name."""
-        # Draw semi-transparent background box
         draw.rounded_rectangle([x, y, x+w, y+h], radius=20, fill=(30, 34, 45, 220), outline=color, width=4)
 
-        # Draw Box Title (e.g., Best Batsman)
         draw.text((x + 25, y + 15), title.upper(), font=font_md, fill=color)
 
-        # Draw Player Name with the CUSTOM FONT
         draw.text((x + 25, y + 75), player_name, font=font_name, fill="white")
 
-        # Draw Remaining Stats (Runs, Balls, etc.)
         for i, stat in enumerate(stats_list):
             draw.text((x + 25, y + 130 + (i * 45)), stat, font=font_sm, fill="#CCCCCC")
 
-    # 4. Positions
     y_scores = 120
     y_boxes_top = 280
     y_boxes_bot = 580
     y_winner = 880
 
-    # 5. Render Content
-    # Team Scores
     draw.text((120, y_scores), f"TEAM A: {match_data['score_a']}", font=font_lg, fill="white")
     draw.text((720, y_scores), f"TEAM B: {match_data['score_b']}", font=font_lg, fill="white")
 
-    # --- Team A Boxes ---
     draw_box(100, y_boxes_top, 520, 270, "Best Batsman (A)", 
              match_data['bat_a_name'], 
              [f"Runs: {match_data['bat_a_r']} ({match_data['bat_a_b']}b)", f"4s: {match_data['bat_a_4']} | 6s: {match_data['bat_a_6']}"], "#FF3131")
@@ -317,8 +274,7 @@ def build_final_summary_image(match_data):
              match_data['bowl_a_name'], 
              [f"Wickets: {match_data['bowl_a_w']}", f"Runs Conceded: {match_data['bowl_a_r_c']}"], "#FF3131")
 
-    # --- Team B Boxes ---
-    draw_box(660, y_boxes_top, 520, 270, "Best Batsman (B)", 
+    draw_box(660, y_boxes_bot, 520, 270, "Best Batsman (B)", 
              match_data['bat_b_name'], 
              [f"Runs: {match_data['bat_b_r']} ({match_data['bat_b_b']}b)", f"4s: {match_data['bat_b_4']} | 6s: {match_data['bat_b_6']}"], "#007FFF")
 
@@ -326,19 +282,15 @@ def build_final_summary_image(match_data):
              match_data['bowl_b_name'], 
              [f"Wickets: {match_data['bowl_b_w']}", f"Runs Conceded: {match_data['bowl_b_r_c']}"], "#007FFF")
 
-    # --- Final Result ---
     winner_text = f"🏆 {match_data['winner_name'].upper()} WON THE MATCH!"
     bbox = draw.textbbox((0, 0), winner_text, font=font_lg)
     w_text = bbox[2] - bbox[0]
     draw.text((640 - w_text/2, y_winner), winner_text, font=font_lg, fill="#FFD700", stroke_width=2, stroke_fill="black")
 
-    # 6. Export
     buf = io.BytesIO()
     img.convert("RGB").save(buf, format="JPEG", quality=95)
     buf.seek(0)
     return buf
-
-# ───────────────── DATABASE SYNC ─────────────────
 
 async def save_match_stats(match, winner_team):
     """
@@ -350,13 +302,10 @@ async def save_match_stats(match, winner_team):
     game_id = match.get("game_id")
     players = match.get("players", {})
 
-    # 🛠 SAFETY: Prevent processing if match data is empty
     if not game_id or "teams" not in match or not players:
         print(f"⚠️ Stats skip: Match {game_id} has incomplete memory data.")
         return
-
-    # 1. Determine Man of the Match (MOM) Logic
-    # Points: 1 per run, 25 per wicket, 10 for winning team bonus
+        
     motm_id = None
     max_points = -1
     for uid, p in players.items():
@@ -369,7 +318,6 @@ async def save_match_stats(match, winner_team):
 
     async with db.pool.acquire() as conn:
         async with conn.transaction():
-            # 2. Update Main Games Table
             team_a = match["teams"].get("A", {"runs": 0, "wickets": 0})
             team_b = match["teams"].get("B", {"runs": 0, "wickets": 0})
 
@@ -384,13 +332,11 @@ async def save_match_stats(match, winner_team):
                 team_a.get("wickets", 0), team_b.get("wickets", 0), game_id
             )
 
-            # 3. Loop through players and update Individual Career Stats
             for uid, p in players.items():
                 is_winner = 1 if p.get("team") == winner_team else 0
                 is_loser = 1 if (winner_team not in ["Tie", "No Result", None] and p.get("team") != winner_team) else 0
                 is_mom = 1 if uid == motm_id else 0
 
-                # Stats Extraction
                 runs = p.get("runs", 0)
                 wickets = p.get("wickets", 0)
                 fours = p.get("fours_count", 0)
@@ -399,12 +345,10 @@ async def save_match_stats(match, winner_team):
                 b_bowled = p.get("balls_bowled", 0)
                 r_conceded = p.get("runs_conceded", 0)
 
-                # Milestones
                 is_50 = 1 if 50 <= runs < 100 else 0
                 is_100 = 1 if runs >= 100 else 0
                 is_duck = 1 if runs == 0 and p.get("is_out") else 0
 
-                # Update Core Stats
                 await conn.execute(
                     """
                     INSERT INTO user_stats (
@@ -433,13 +377,11 @@ async def save_match_stats(match, winner_team):
                     r_conceded, fours, sixes, is_mom, is_100, is_50, is_duck
                 )
 
-                # 4. Update Highest Score (GREATEST ensures we don't overwrite if match score is lower)
                 await conn.execute(
                     "UPDATE user_stats SET highest_score = GREATEST(highest_score, $1) WHERE user_id = $2",
                     runs, uid
                 )
 
-            # 5. Update Best Partnership (Tracked for all players involved in the final pair)
             partnership_runs = match.get("partnership", 0)
             striker = match.get("striker")
             non_striker = match.get("non_striker")
