@@ -229,16 +229,16 @@ async def get_home_text(user):
     try:
         stats = await safe_fetchrow("SELECT *, (SELECT COUNT(*) + 1 FROM user_stats WHERE runs > t.runs) as rank, CASE WHEN matches > 0 THEN (wins::float / matches * 100) ELSE 0 END as current_win_rate FROM user_stats t WHERE user_id = $1", uid)
     except Exception:
-        return f"📊 <b>Welcome, {user.first_name}!</b>\n\nDatabase warming up. Try again shortly."
+        return f"📊 <b>Welcome, <a href='tg://user?id={uid}'>{user.first_name}</a>!</b>\n\nDatabase warming up. Try again shortly."
 
     if not stats:
-        return f"📊 <b>Welcome, {user.first_name}!</b>\n\n⚠️ Your stats are being initialized.\nPlay at least one match and try again."
+        return f"📊 <b>Welcome, <a href='tg://user?id={uid}'>{user.first_name}</a>!</b>\n\n⚠️ Your stats are being initialized.\nPlay at least one match and try again."
 
     name = stats.get("first_name") or user.first_name
     win_rate = stats.get("current_win_rate", 0)
 
     return (
-        f"📊 <b>𝗪𝗲𝗹𝗰𝗼𝗺𝗲, {name}!</b>\n"
+        f"📊 <b>𝗪𝗲𝗹𝗰𝗼𝗺𝗲, <a href='tg://user?id={uid}'>{name}</a>!</b>\n"
         f"🏅 <b>Global Rank:</b> #{int(stats['rank'])}\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n"
         f"🏃 <b>Runs:</b> <code>{int(stats.get('runs', 0))}</code>\n"
