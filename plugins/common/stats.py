@@ -69,12 +69,10 @@ async def stats_cmd(client, message):
         users = groups = games_today = games_total = active_games = 0
 
         try:
-            async with db.pool.acquire() as conn:
-                users = await conn.fetchval(
-                ) or 0
+            users = await total_users()
         except Exception:
             users = 0
-
+            
         try:
             groups = await total_groups()
         except Exception:
