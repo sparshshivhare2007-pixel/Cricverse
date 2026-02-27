@@ -7,6 +7,15 @@ from plugins.game.team import ACTIVE_MATCHES
 HOST_VOTES = {}
 VOTE_TIMEOUT = 120 
 
+async def sync_captain_to_db(game_id, team, new_captain_id):
+    try:
+        from database.connection import db
+        async with db.pool.acquire() as conn:
+            await conn.execute("UPDATE game_players SET is_captain = FALSE WHERE game_id = $1 AND team = $2", game_id, team)
+            await conn.execute("UPDATE game_players SET is_captain = TRUE WHERE game_id = $1 AND user_id = $2", game_id, new_captain_id)
+    except Exception as e:
+        print(f"❌ DB Captain Sync Error: {e}")
+        
 def sync_captain_flags(match, team):
     captain_id = match["teams"][team].get("captain_id")
 
@@ -243,7 +252,8 @@ async def change_captain(client, message):
             break
 
     is_host = user_id == match.get("host_id")
-    is_captain = user_team and teams[user_team].get("captain_id") == user_id
+    current_cap_id = teams.get(user_team, {}).get("captain_id") or teams.get(user_team, {}).get("captain")
+    is_captain = user_team and current_cap_id == user_id
 
     if not is_host and not user_team:
         return await message.reply_text("🚫 Only Host or match players can use this command.")
@@ -273,6 +283,7 @@ async def change_captain(client, message):
             return await message.reply_text("❌ Target must be a player of that team.")
 
         team_data["captain_id"] = target_id
+        team_data["captain"] = target_id # Pro Mode Fix
         user_cache[target_id] = user_cache.get(target_id, "Player")
 
         for uid, pdata in match["players"].items():
@@ -280,6 +291,8 @@ async def change_captain(client, message):
                 pdata["is_captain"] = (uid == target_id)
 
         match["phase"] = match.get("prev_phase", "LIVE")
+        
+        await sync_captain_to_db(match["game_id"], team, target_id)
 
         return await message.reply_text(
             f"🎖 <b>CAPTAIN CHANGED</b>\n\n"
@@ -309,6 +322,7 @@ async def change_captain(client, message):
             return await message.reply_text("❌ You can only assign captain within your team.")
 
         team_data["captain_id"] = target_id
+        team_data["captain"] = target_id # Pro Mode Fix
         user_cache[target_id] = user_cache.get(target_id, "Player")
 
         for uid, pdata in match["players"].items():
@@ -316,6 +330,8 @@ async def change_captain(client, message):
                 pdata["is_captain"] = (uid == target_id)
 
         match["phase"] = match.get("prev_phase", "LIVE")
+        
+        await sync_captain_to_db(match["game_id"], user_team, target_id)
 
         return await message.reply_text(
             f"🎖 <b>NEW TEAM {user_team} CAPTAIN</b>\n\n"
@@ -332,7 +348,7 @@ async def change_captain(client, message):
 
     match["prev_phase"] = match.get("phase", "LIVE")
     match["phase"] = f"CAP_CHANGE_{user_team}"
-
+    
     async def auto_cancel():
         await asyncio.sleep(120)
         if match.get("phase") == f"CAP_CHANGE_{user_team}":
@@ -383,6 +399,7 @@ async def claim_captain(client, query):
         return await query.answer("You are not in this team.", show_alert=True)
 
     match["teams"][team]["captain_id"] = user.id
+    match["teams"][team]["captain"] = user.id # Pro Mode Fix
     match["user_cache"][user.id] = user.first_name
 
     for uid, pdata in match["players"].items():
@@ -394,6 +411,8 @@ async def claim_captain(client, query):
         task.cancel()
 
     match["phase"] = match.pop("prev_phase", "LIVE")
+    
+    await sync_captain_to_db(match["game_id"], team, user.id)
 
     await query.message.edit_text(
         f"🎖 **NEW TEAM {team} CAPTAIN**\n\n"
