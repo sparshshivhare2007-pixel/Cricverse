@@ -12,6 +12,11 @@ from plugins.game.team.timeouts import start_timer
 
 GROUP_COOLDOWN = {}
 
+def get_back_to_group_markup(group_chat_id: int):
+    clean_chat_id = str(group_chat_id).replace("-100", "")
+    group_link = f"https://t.me/c/{clean_chat_id}/999999999"
+    return InlineKeyboardMarkup([[InlineKeyboardButton("Back to Group 🏏", url=group_link)]])
+
 def get_mention(match, user_id):
     name = match.get("user_cache", {}).get(user_id, "Player")
     return f'<a href="tg://user?id={user_id}">{name}</a>'
@@ -62,8 +67,10 @@ def get_display_ball_no(match):
     return min(balls_bowled + 1, 6)
 
 async def start_first_ball(client, match):
-    if match.get("prompt_dispatched"):
+    is_new_over = len(match.get("current_over_balls", [])) == 0
+    if match.get("prompt_dispatched") and not is_new_over:
         return
+        
     match["prompt_dispatched"] = True
     
     if client is None:
@@ -200,17 +207,8 @@ async def bowler_dm_handler(client, message):
             pass
 
     chat_id = match["chat_id"]
-    group_username = match.get("group_username")
-
-    if group_username:
-        group_url = f"https://t.me/{group_username}"
-    else:
-        clean_chat_id = str(chat_id).replace("-100", "")
-        group_url = f"https://t.me/c/{clean_chat_id}"
-
-    back_btn = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Back to Group 🏏", url=group_url)]
-    ])
+    
+    back_btn = get_back_to_group_markup(chat_id)
 
     await message.reply_text("⚾️", quote=True)
 
@@ -322,202 +320,13 @@ async def batter_handler(client, message):
 
     else:
         comms_list = {
-            0: [
-                "Dead bat. Crowd boos 😴",
-                "Stonewall defence.",
-                "Dot ball pressure builds…",
-                "Bat says no, runs say bye 👋",
-                "That ball died a lonely death.",
-                "Even the bowler looks bored.",
-                "Dot ball sponsored by patience.",
-                "Defense so solid, WiFi can’t pass through.",
-                "Crowd checks phone. Nothing happened.",
-                "Pure defence, zero entertainment.",
-                "A dot so quiet you can hear regrets.",
-                "Commentator running out of words.",
-                "Batting like it’s a test match 😐",
-                "Kya hi ukhaad liya? Dot ball.",
-                "Yeh shot nahi tha, majboori thi.",
-                "Bowler smiling for no reason.",
-                "Fielders relax, nothing to do.",
-                "That ball deserves a refund.",
-                "Momentum paused. Completely.",
-                "Silence louder than crowd noise.",
-                "Solid defensive technique on display.",
-                "Good line respected by the batter.",
-                "No scoring opportunity created.",
-                "Bowler wins that mini battle.",
-                "Textbook block.",
-                "Correct shot for the situation.",
-                "Scoreboard unchanged. Ego unchanged.",
-                "That was cricket ASMR.",
-                "Ball met bat. Nothing else happened.",
-                "This over needs caffeine."
-            ],
-
-            1: [
-                "Quick single!",
-                "Sharp running!",
-                "Keeps the scoreboard ticking.",
-                "Steal of the century 🏃‍♂️",
-                "Blink and you miss it!",
-                "Just enough to survive.",
-                "One run, infinite relief 😌",
-                "Bowler annoyed, batter satisfied.",
-                "Chori pakdi gayi, par run mil gaya 😏",
-                "Fitness check passed.",
-                "Ek run bhi aaj kal mehenga hai!",
-                "Risk liya… bach gaye!",
-                "Soft hands, smart feet.",
-                "Sneaky but effective.",
-                "Bowler not impressed.",
-                "Captain sighs in disappointment.",
-                "Hard-earned single.",
-                "Minimal risk, maximum sense.",
-                "Strike rotated successfully.",
-                "Game awareness on point.",
-                "One run and a long breath.",
-                "Not pretty, but it works.",
-                "Survival mode activated.",
-                "Good placement into the gap.",
-                "Rotates strike nicely.",
-                "Keeps pressure manageable."
-            ],
-
-            2: [
-                "Placed perfectly.",
-                "Good awareness!",
-                "Easy two.",
-                "Threaded the gap like a needle 🪡",
-                "Lazy fielding punished.",
-                "They’ll take that all day.",
-                "Smooth as butter 🧈",
-                "Running between wickets: 10/10.",
-                "Do run, no tension.",
-                "Gap mila, mauka mila!",
-                "Fielders still loading…",
-                "Placement coaching DVD mein jayega.",
-                "Timing beats power.",
-                "Comfortable running.",
-                "Good communication between batters.",
-                "Bowler not happy.",
-                "Safe cricket, smart cricket.",
-                "Two runs without fuss.",
-                "Pressure released slightly.",
-                "Ground fielding exposed.",
-                "Fielding standards questioned.",
-                "That gap was illegal.",
-                "Excellent shot selection.",
-                "Perfect use of the field."
-            ],
-
-            3: [
-                "Risky but rewarding!",
-                "Great hustle!",
-                "All legs, no brakes 😤",
-                "Fielders confused, batters amused.",
-                "That needed commitment — and lungs!",
-                "Calculated madness!",
-                "Captain screaming, crowd screaming louder.",
-                "Teen run ya heart attack!",
-                "Galti ki gunjaish zero thi 😬",
-                "Yeh running nahi, sprint thi!",
-                "Stadium mein oxygen kam pad gayi.",
-                "Close call but worth it.",
-                "Pressure cricket at its finest.",
-                "Fielding chaos unlocked.",
-                "Bowler furious.",
-                "Crowd loves the drama.",
-                "Risk meter full.",
-                "Pure adrenaline.",
-                "That was brave.",
-                "Almost disaster!",
-                "One bad throw and it was over.",
-                "Bowler aged 5 years.",
-                "Excellent commitment between wickets.",
-                "High-risk, high-reward running."
-            ],
-
-            4: [
-                "CRACKED! 💥",
-                "That raced away!",
-                "Boundary finds the rope!",
-                "Pure timing. Chef’s kiss 👨‍🍳💋",
-                "Bowler tried. Ball didn’t listen.",
-                "Placed where the fielder isn’t.",
-                "That’s a textbook boundary!",
-                "Sponsors very happy right now.",
-                "Chaar run aur bowler pareshaan!",
-                "Shot mein class, bowler mein sass.",
-                "Yeh ground shot ke liye chhota pad gaya!",
-                "Ball bole: bas karo bhai!",
-                "Elegant stroke play.",
-                "No chance for anyone.",
-                "Crowd on its feet!",
-                "That was effortless.",
-                "Boundary like a statement.",
-                "Timing > power.",
-                "Bowler loses length.",
-                "Confidence booster!",
-                "Bowler absolutely cooked.",
-                "That gap was personal.",
-                "Exquisite timing and placement.",
-                "Classic cricketing shot."
-            ],
-
-            5: [
-                "Chaos in the field!",
-                "Overthrows galore!",
-                "Fielding.exe has stopped working 💀",
-                "Everyone running, nobody stopping!",
-                "Bowler questioning life choices.",
-                "Captain hiding behind the cap.",
-                "This is comedy cricket 🤡",
-                "Yeh fielding nahi, blooper reel hai!",
-                "Ball bhi confused, fielder bhi!",
-                "Coach ne aankhein band kar li 👀",
-                "Five runs… aur izzat free mein!",
-                "Absolute panic stations.",
-                "Pressure causes mistakes.",
-                "Fielding meltdown.",
-                "Communication? Missing.",
-                "One error, big damage.",
-                "Bowler helpless.",
-                "Crowd laughing hard.",
-                "Chaos unlocked.",
-                "Defensive drills incoming.",
-                "That was illegal fielding.",
-                "Someone getting benched.",
-                "Capitalized on fielding errors.",
-                "Awareness to keep running."
-            ],
-
-            6: [
-                "🚀 INTO ORBIT!",
-                "HUGE MAXIMUM!",
-                "Bowler in shambles 😭",
-                "That ball needs a passport!",
-                "Satellite launched successfully 🛰️",
-                "Clean hit, cleaner vibes 🔥",
-                "Crowd loses its mind!",
-                "Somewhere a fielder just gave up.",
-                "Six runs and emotional damage 💔",
-                "Yeh shot nahi, warning thi!",
-                "Ball milne ka koi chance nahi!",
-                "Bowler bole: bas bhai, over khatam karo!",
-                "Stadium ke bahar giri hai yeh!",
-                "SHOT ITNI BADI, SCOREBOARD HIL GAYA 💣",
-                "Absolutely smoked!",
-                "That’s gone miles.",
-                "Pure power!",
-                "No doubts, no drama.",
-                "Bowler looks at the sky.",
-                "Momentum completely flipped.",
-                "Bowler needs therapy.",
-                "That landed in another district.",
-                "Perfect swing, perfect connection.",
-                "Clean striking at its best."
-            ]
+            0: ["Dead bat. Crowd boos 😴", "Stonewall defence.", "Dot ball pressure builds…", "Bat says no, runs say bye 👋", "That ball died a lonely death.", "Even the bowler looks bored.", "Dot ball sponsored by patience.", "Defense so solid, WiFi can’t pass through.", "Crowd checks phone. Nothing happened.", "Pure defence, zero entertainment.", "A dot so quiet you can hear regrets.", "Commentator running out of words.", "Batting like it’s a test match 😐", "Kya hi ukhaad liya? Dot ball.", "Yeh shot nahi tha, majboori thi.", "Bowler smiling for no reason.", "Fielders relax, nothing to do.", "That ball deserves a refund.", "Momentum paused. Completely.", "Silence louder than crowd noise.", "Solid defensive technique on display.", "Good line respected by the batter.", "No scoring opportunity created.", "Bowler wins that mini battle.", "Textbook block.", "Correct shot for the situation.", "Scoreboard unchanged. Ego unchanged.", "That was cricket ASMR.", "Ball met bat. Nothing else happened.", "This over needs caffeine."],
+            1: ["Quick single!", "Sharp running!", "Keeps the scoreboard ticking.", "Steal of the century 🏃‍♂️", "Blink and you miss it!", "Just enough to survive.", "One run, infinite relief 😌", "Bowler annoyed, batter satisfied.", "Chori pakdi gayi, par run mil gaya 😏", "Fitness check passed.", "Ek run bhi aaj kal mehenga hai!", "Risk liya… bach gaye!", "Soft hands, smart feet.", "Sneaky but effective.", "Bowler not impressed.", "Captain sighs in disappointment.", "Hard-earned single.", "Minimal risk, maximum sense.", "Strike rotated successfully.", "Game awareness on point.", "One run and a long breath.", "Not pretty, but it works.", "Survival mode activated.", "Good placement into the gap.", "Rotates strike nicely.", "Keeps pressure manageable."],
+            2: ["Placed perfectly.", "Good awareness!", "Easy two.", "Threaded the gap like a needle 🪡", "Lazy fielding punished.", "They’ll take that all day.", "Smooth as butter 🧈", "Running between wickets: 10/10.", "Do run, no tension.", "Gap mila, mauka mila!", "Fielders still loading…", "Placement coaching DVD mein jayega.", "Timing beats power.", "Comfortable running.", "Good communication between batters.", "Bowler not happy.", "Safe cricket, smart cricket.", "Two runs without fuss.", "Pressure released slightly.", "Ground fielding exposed.", "Fielding standards questioned.", "That gap was illegal.", "Excellent shot selection.", "Perfect use of the field."],
+            3: ["Risky but rewarding!", "Great hustle!", "All legs, no brakes 😤", "Fielders confused, batters amused.", "That needed commitment — and lungs!", "Calculated madness!", "Captain screaming, crowd screaming louder.", "Teen run ya heart attack!", "Galti ki gunjaish zero thi 😬", "Yeh running nahi, sprint thi!", "Stadium mein oxygen kam pad gayi.", "Close call but worth it.", "Pressure cricket at its finest.", "Fielding chaos unlocked.", "Bowler furious.", "Crowd loves the drama.", "Risk meter full.", "Pure adrenaline.", "That was brave.", "Almost disaster!", "One bad throw and it was over.", "Bowler aged 5 years.", "Excellent commitment between wickets.", "High-risk, high-reward running."],
+            4: ["CRACKED! 💥", "That raced away!", "Boundary finds the rope!", "Pure timing. Chef’s kiss 👨‍🍳💋", "Bowler tried. Ball didn’t listen.", "Placed where the fielder isn’t.", "That’s a textbook boundary!", "Sponsors very happy right now.", "Chaar run aur bowler pareshaan!", "Shot mein class, bowler mein sass.", "Yeh ground shot ke liye chhota pad gaya!", "Ball bole: bas karo bhai!", "Elegant stroke play.", "No chance for anyone.", "Crowd on its feet!", "That was effortless.", "Boundary like a statement.", "Timing > power.", "Bowler loses length.", "Confidence booster!", "Bowler absolutely cooked.", "That gap was personal.", "Exquisite timing and placement.", "Classic cricketing shot."],
+            5: ["Chaos in the field!", "Overthrows galore!", "Fielding.exe has stopped working 💀", "Everyone running, nobody stopping!", "Bowler questioning life choices.", "Captain hiding behind the cap.", "This is comedy cricket 🤡", "Yeh fielding nahi, blooper reel hai!", "Ball bhi confused, fielder bhi!", "Coach ne aankhein band kar li 👀", "Five runs… aur izzat free mein!", "Absolute panic stations.", "Pressure causes mistakes.", "Fielding meltdown.", "Communication? Missing.", "One error, big damage.", "Bowler helpless.", "Crowd laughing hard.", "Chaos unlocked.", "Defensive drills incoming.", "That was illegal fielding.", "Someone getting benched.", "Capitalized on fielding errors.", "Awareness to keep running."],
+            6: ["🚀 INTO ORBIT!", "HUGE MAXIMUM!", "Bowler in shambles 😭", "That ball needs a passport!", "Satellite launched successfully 🛰️", "Clean hit, cleaner vibes 🔥", "Crowd loses its mind!", "Somewhere a fielder just gave up.", "Six runs and emotional damage 💔", "Yeh shot nahi, warning thi!", "Ball milne ka koi chance nahi!", "Bowler bole: bas bhai, over khatam karo!", "Stadium ke bahar giri hai yeh!", "SHOT ITNI BADI, SCOREBOARD HIL GAYA 💣", "Absolutely smoked!", "That’s gone miles.", "Pure power!", "No doubts, no drama.", "Bowler looks at the sky.", "Momentum completely flipped.", "Bowler needs therapy.", "That landed in another district.", "Perfect swing, perfect connection.", "Clean striking at its best."]
         }
 
         caption = (
@@ -541,4 +350,4 @@ async def check_cooldown(client, message):
             await message.reply_text(f"⏳ **Slow down!** Try again after {int(10 - diff)}s.")
             await message.stop_propagation()
     GROUP_COOLDOWN[chat_id] = now
-        
+    
