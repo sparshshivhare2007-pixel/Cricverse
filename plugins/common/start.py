@@ -1,8 +1,7 @@
+import random
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import random
-
 from config import Config
 from database.users import add_user, total_users
 
@@ -21,7 +20,6 @@ async def start_cmd(client: Client, message):
     first_name = user.first_name or "Captain"
 
     is_new = await add_user(user.id, first_name)
-
     mood = random.choice(START_MOODS)
 
     caption = (
@@ -38,20 +36,15 @@ async def start_cmd(client: Client, message):
         "👇 Use the buttons below"
     )
 
-    buttons = InlineKeyboardMarkup(
+    buttons = InlineKeyboardMarkup([
         [
-            [
-                InlineKeyboardButton("🧩 PlayZone", url=PLAYZONE_LINK),
-                InlineKeyboardButton("🆘 Support", url=SUPPORT_LINK)
-            ],
-            [
-                InlineKeyboardButton(
-                    "➕ Add to Group",
-                    url=f"https://t.me/{Config.BOT_USERNAME}?startgroup=true"
-                )
-            ]
+            InlineKeyboardButton("🧩 PlayZone", url=PLAYZONE_LINK),
+            InlineKeyboardButton("🆘 Support", url=SUPPORT_LINK)
+        ],
+        [
+            InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{Config.BOT_USERNAME}?startgroup=true")
         ]
-    )
+    ])
 
     try:
         await message.reply_photo(
@@ -61,11 +54,7 @@ async def start_cmd(client: Client, message):
             reply_markup=buttons
         )
     except Exception:
-        await message.reply_text(
-            caption,
-            parse_mode=ParseMode.HTML,
-            reply_markup=buttons
-        )
+        await message.reply_text(caption, parse_mode=ParseMode.HTML, reply_markup=buttons)
 
     if is_new:
         try:
@@ -76,11 +65,7 @@ async def start_cmd(client: Client, message):
                 f"🆔 <code>{user.id}</code>\n"
                 f"📊 Total Users: {count}"
             )
-            await client.send_message(
-                Config.LOG_CHANNEL,
-                log_text,
-                parse_mode=ParseMode.HTML
-            )
+            await client.send_message(Config.LOG_CHANNEL, log_text, parse_mode=ParseMode.HTML)
         except Exception:
             pass
 
