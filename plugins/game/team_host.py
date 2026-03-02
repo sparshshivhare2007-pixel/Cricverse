@@ -5,10 +5,27 @@ from pyrogram.enums import ParseMode
 from Assets.files import TEAM_CREATE_IMAGE
 from database.games import get_active_game, create_game, user_in_other_game
 from utils.mentions import mention_html
+from utils.logger import send_match_log   # added
 
 @Client.on_callback_query(filters.regex("^mode_team$"))
 async def team_mode_selected(client, query):
     await query.answer()
+
+    chat_id = query.message.chat.id
+
+    # temporary match data for logging
+    match = {
+        "game_id": "Pending",
+        "chat_id": chat_id,
+        "host_name": "Not Selected Yet"
+    }
+
+    await send_match_log(
+        client,
+        "🟢 MATCH MODE SELECTED",
+        match,
+        "Team mode selected in the group."
+    )
 
     buttons = InlineKeyboardMarkup(
         [
@@ -38,6 +55,7 @@ async def team_mode_selected(client, query):
         reply_markup=buttons
     )
 
+
 @Client.on_callback_query(filters.regex("^host_select$"))
 async def confirm_host(client, query):
     user = query.from_user
@@ -58,7 +76,7 @@ async def confirm_host(client, query):
             show_alert=True
         )
 
-    await create_game(
+    match = await create_game(
         chat_id=chat_id,
         mode="team",
         host_id=user.id,
@@ -75,8 +93,8 @@ async def confirm_host(client, query):
         parse_mode=ParseMode.HTML
     )
 
+
 @Client.on_callback_query(filters.regex("^mode_cancel$"))
 async def cancel_game(client, query):
     await query.answer()
     await query.message.edit_text("`Game setup cancelled.`")
-    
