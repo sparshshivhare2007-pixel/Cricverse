@@ -600,8 +600,24 @@ async def set_batting(client, message):
             )
 
             if match.get("current_bowler"):
+                match["prompt_dispatched"] = False
+                match["bowled"] = False
+                match["batted"] = False
+                match["last_bowl"] = None
+                
+                if "timeouts" in match:
+                    for role in ["bowler", "batter"]:
+                        task = match["timeouts"].get(role, {}).get("task")
+                        if task:
+                            try:
+                                task.cancel()
+                            except Exception:
+                                pass
+
                 from plugins.game.team.state import start_first_ball
-                return await start_first_ball(client, match)
+                await start_first_ball(client, match)
+                return
+                
             else:
                 return await message.reply_text(
                     "🎯 <b>Batters are set.</b>\n"
