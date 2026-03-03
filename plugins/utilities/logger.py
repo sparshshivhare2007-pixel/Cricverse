@@ -1,18 +1,25 @@
-from pyrogram import Client, filters
+from pyrogram import Client
 from pyrogram.types import ChatMemberUpdated
 from pyrogram.enums import ParseMode, ChatMemberStatus
 
 LOG_GROUP_ID = -1003692127639
+
 
 async def send_match_log(client, action_title, match, extra_text=""):
     """Function to send match-related logs to the bot's private group"""
     if not LOG_GROUP_ID:
         return
 
-    game_id = match.get("game_id", "Unknown")
-    chat_id = match.get("chat_id", "Unknown")
-    host_name = match.get("host_name", "Unknown")
-    
+    # Handle if match is UUID or dict
+    if isinstance(match, dict):
+        game_id = match.get("game_id", "Unknown")
+        chat_id = match.get("chat_id", "Unknown")
+        host_name = match.get("host_name", "Unknown")
+    else:
+        game_id = match
+        chat_id = "Unknown"
+        host_name = "Unknown"
+
     text = (
         f"📝 **{action_title}**\n"
         f"──┈┄┄╌╌╌╌┄┄┈──\n"
@@ -21,11 +28,11 @@ async def send_match_log(client, action_title, match, extra_text=""):
         f"💬 **Group ID:** `{chat_id}`\n\n"
         f"{extra_text}"
     )
-    
+
     try:
         await client.send_message(
-            chat_id=LOG_GROUP_ID, 
-            text=text, 
+            chat_id=LOG_GROUP_ID,
+            text=text,
             parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
