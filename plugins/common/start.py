@@ -5,7 +5,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import Config
 from database.users import add_user, total_users
 
-PLAYZONE_LINK = "https://t.me/+joF1bCfiMT9jMzVh"
+PLAYZONE_LINK = "https://t.me/CLG_fun_zone"
 SUPPORT_LINK = "https://t.me/Nexxxxxo_bots"
 
 START_MOODS = [
@@ -42,7 +42,7 @@ async def start_cmd(client: Client, message):
             InlineKeyboardButton("🆘 Support", url=SUPPORT_LINK)
         ],
         [
-            InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{Config.BOT_USERNAME}?startgroup=true")
+            InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{Config.BOT_USERNAME.replace('@','')}?startgroup=true")
         ]
     ])
 
