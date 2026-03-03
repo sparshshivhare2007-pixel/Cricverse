@@ -10,9 +10,9 @@ class Database:
             print("🗄️ Connecting to PostgreSQL...")
             self.pool = await asyncpg.create_pool(
                 dsn=Config.DATABASE_URL,
-                min_size=5,
-                max_size=30
+                min_size=10,
+                max_size=85 
             )
-            print("✅ Database Pool Created.")
+            print("✅ Database Pool Created (PRO MODE: 85 Max Connections).")
 
 db = Database()
