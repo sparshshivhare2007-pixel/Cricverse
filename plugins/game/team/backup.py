@@ -2,9 +2,10 @@ import json
 import os
 import uuid
 from pyrogram import Client, filters
-from pyrogram.enums import ParseMode
+from pyrogram.enums import ParseMode, ChatMemberStatus
 from plugins.game.team import ACTIVE_MATCHES
 from utils.permissions import host_only
+from config import Config
 
 def fix_json_keys(data):
     if isinstance(data, dict):
@@ -19,8 +20,24 @@ def fix_json_keys(data):
         return data
 
 @Client.on_message(filters.command("restore") & filters.group)
-@host_only
 async def restore_game_cmd(client, message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    
+    is_admin = False
+    if hasattr(Config, "OWNER_IDS") and user_id in Config.OWNER_IDS:
+        is_admin = True
+    else:
+        try:
+            member = await client.get_chat_member(chat_id, user_id)
+            if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
+                is_admin = True
+        except:
+            pass
+            
+    if not is_admin:
+        return await message.reply_text("🚫 **Access Denied:** only **Group Admins** can restore the game!")
+
     if not message.reply_to_message or not message.reply_to_message.document:
         return await message.reply_text("⚠️ Please reply to a **.json** Save File first!")
 
@@ -28,7 +45,6 @@ async def restore_game_cmd(client, message):
     if not doc.file_name.endswith(".json"):
         return await message.reply_text("⚠️ Invalid file! Only `.json` match files are supported.")
 
-    chat_id = message.chat.id
     wait_msg = await message.reply_text("🔄 **Downloading and restoring match data...**")
 
     try:
@@ -44,7 +60,6 @@ async def restore_game_cmd(client, message):
             "bowler": {"fails": 0, "task": None},
             "batter": {"fails": 0, "task": None},
         }
-        
         backup_data["announced_achievements"] = {
             "batting": {}, "bowling": {}, "partnerships": set()
         }
@@ -56,11 +71,11 @@ async def restore_game_cmd(client, message):
             f"──┈┄┄╌╌╌╌┄┄┈──\n"
             f"Phase: **{backup_data.get('phase', 'LIVE')}**\n"
             f"Total Balls: **{backup_data.get('total_balls', 0)}**\n\n"
-            f"▶️ You can now resume playing. Bowler can send the next ball!"
+            f"▶️ Game is live again! Send the next command."
         )
     except Exception as e:
         await wait_msg.edit_text(f"❌ **Restoration Failed:**\nError: `{e}`")
-
+        
 @Client.on_message(filters.command(["change_side", "changeside"]) & filters.group)
 @host_only
 async def change_side_cmd(client, message):
