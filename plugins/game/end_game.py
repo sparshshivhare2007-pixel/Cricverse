@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import uuid
@@ -76,15 +77,26 @@ async def confirm_endgame(client, query):
 
     await query.answer("Force ending match & generating backup…")
 
-    end_text = (
-        "🛑 **𝗚𝗔𝗠𝗘 𝗙𝗢𝗥𝗖𝗘 𝗘𝗡𝗗𝗘𝗗**\n"
-        "`Match summary & stats saved.`"
-    )
+    end_text = "🛑 **𝗚𝗔𝗠𝗘 𝗙𝗢𝗥𝗖𝗘 𝗘𝗡𝗗𝗘𝗗**\n`Match summary & stats saved.`"
 
     if match:
+        for key, value in list(match.items()):
+            if isinstance(value, asyncio.Task):
+                try:
+                    value.cancel()
+                except: pass
+                
+        if "timeouts" in match:
+            for r in ["bowler", "batter"]:
+                task = match["timeouts"].get(r, {}).get("task")
+                if isinstance(task, asyncio.Task):
+                    try:
+                        task.cancel()
+                    except: pass
+
         safe_match = {}
         for key, val in match.items():
-            if key in ["client", "timeouts", "cap_change_task"]: 
+            if key in ["client", "timeouts", "cap_change_task"] or isinstance(val, asyncio.Task): 
                 continue
             safe_match[key] = val
 
@@ -104,7 +116,6 @@ async def confirm_endgame(client, query):
             os.remove(file_name)
 
         match["client"] = client
-
         log_match = {
             "game_id": str(match.get("game_id", "Unknown")),
             "chat_id": chat_id,
@@ -118,19 +129,12 @@ async def confirm_endgame(client, query):
         await end_match(match, forced=True)
 
         if early_force_end:
-            end_text = (
-                "🛑 **𝗚𝗔𝗠𝗘 𝗙𝗢𝗥𝗖𝗘 𝗘𝗡𝗗𝗘𝗗**\n"
-                "`Match stopped early. Player stats saved.`"
-            )
+            end_text = "🛑 **𝗚𝗔𝗠𝗘 𝗙𝗢𝗥𝗖𝗘 𝗘𝗡𝗗𝗘𝗗**\n`Match stopped early. Player stats saved.`"
 
-        await send_match_log(
-            client,
-            "🛑 MATCH FORCE ENDED",
-            log_match,
-            f"Match was force ended by {query.from_user.mention} in {group_title}.\n💾 A JSON backup was generated."
-        )
+        await send_match_log(client, "🛑 MATCH FORCE ENDED", log_match, f"Match was force ended by {query.from_user.mention} in {group_title}.\n💾 A JSON backup was generated.")
 
     await close_db_game(chat_id)
+    ACTIVE_MATCHES.pop(chat_id, None) 
     await query.message.edit_text(end_text)
     
 @Client.on_callback_query(filters.regex("^cancel_endgame$"))
