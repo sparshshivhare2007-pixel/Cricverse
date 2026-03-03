@@ -15,7 +15,7 @@ async def start_nexora():
         bot_token=Config.BOT_TOKEN,
         api_id=Config.API_ID,
         api_hash=Config.API_HASH,
-        workers=80,
+        workers=50,
         plugins=dict(root="plugins")
     )
 
