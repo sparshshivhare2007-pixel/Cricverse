@@ -8,7 +8,7 @@ from database.connection import db
 from database.mods import is_mod
 
 OWNER_ID = 8294062042
-
+LOG_GROUP = -1003692127639
 
 async def is_banned(user_id: int):
     async with db.pool.acquire() as conn:
@@ -42,15 +42,19 @@ def banned_check(func):
         banned, data = await is_banned(message.from_user.id)
 
         if banned:
+
             reason = data["reason"] or "No reason provided"
+
             text = (
-                "🚫 <b>You are banned from using this bot</b>\n\n"
-                f"<b>Reason:</b> {reason}"
+                "🚫 <b>Access Restricted</b>\n"
+                "<b>You are banned from using this bot.</b>\n"
+                f"📝 <b>Reason:</b> {reason}"
             )
 
             expire = data["expire_at"]
+
             if expire:
-                text += f"\n<b>Expires:</b> {expire}"
+                text += f"\n⏳ <b>Expires:</b> {expire}"
 
             return await message.reply_text(text, parse_mode=ParseMode.HTML)
 
@@ -86,7 +90,10 @@ async def gban_cmd(client, message):
     target = await resolve_user(client, message)
 
     if not target:
-        return await message.reply_text("Reply / username / user_id required.")
+        return await message.reply_text(
+            "⚠️ <b>User Required</b>\n\nReply or provide username / user_id.",
+            parse_mode=ParseMode.HTML
+        )
 
     args = message.text.split(maxsplit=2)
     reason = args[2] if len(args) >= 3 else "No reason provided"
@@ -97,19 +104,31 @@ async def gban_cmd(client, message):
             INSERT INTO gbans (user_id, reason, banned_by)
             VALUES ($1,$2,$3)
             ON CONFLICT (user_id)
-            DO UPDATE SET reason=$2
+            DO UPDATE SET reason=$2, banned_by=$3
             """,
             target.id,
             reason,
             uid
         )
 
-    await message.reply_text(
-        f"🔨 <b>Global Ban Applied</b>\n\n"
-        f"<b>User:</b> {target.mention}\n"
-        f"<b>Reason:</b> {reason}",
-        parse_mode=ParseMode.HTML
+    text = (
+        "🔨 <b>Global Ban Applied</b>\n"
+        f"👤 <b>User:</b> {target.mention}\n"
+        f"📝 <b>Reason:</b> {reason}\n"
+        f"👮 <b>Banned By:</b> {message.from_user.mention}"
     )
+
+    await message.reply_text(text, parse_mode=ParseMode.HTML)
+
+    log_text = (
+        "🔨 <b>GLOBAL BAN</b>\n"
+        f"👤 <b>User:</b> {target.mention}\n"
+        f"🆔 <code>{target.id}</code>\n"
+        f"👮 <b>Banned By:</b> {message.from_user.mention}\n"
+        f"📝 <b>Reason:</b> {reason}"
+    )
+
+    await client.send_message(LOG_GROUP, log_text, parse_mode=ParseMode.HTML)
 
 
 @Client.on_message(filters.command("gunban"))
@@ -123,7 +142,10 @@ async def gunban_cmd(client, message):
     target = await resolve_user(client, message)
 
     if not target:
-        return await message.reply_text("Reply / username / user_id required.")
+        return await message.reply_text(
+            "⚠️ <b>User Required</b>\n\nReply or provide username / user_id.",
+            parse_mode=ParseMode.HTML
+        )
 
     async with db.pool.acquire() as conn:
         await conn.execute(
@@ -131,10 +153,22 @@ async def gunban_cmd(client, message):
             target.id
         )
 
-    await message.reply_text(
-        f"✅ <b>User Unbanned Globally</b>\n\n{target.mention}",
-        parse_mode=ParseMode.HTML
+    text = (
+        "✅ <b>User Unbanned</b>\n"
+        f"{target.mention} can now use the bot again.\n"
+        f"👮 <b>Unbanned By:</b> {message.from_user.mention}"
     )
+
+    await message.reply_text(text, parse_mode=ParseMode.HTML)
+
+    log_text = (
+        "✅ <b>GLOBAL UNBAN</b>\n\n"
+        f"👤 <b>User:</b> {target.mention}\n"
+        f"🆔 <code>{target.id}</code>\n"
+        f"👮 <b>Unbanned By:</b> {message.from_user.mention}"
+    )
+
+    await client.send_message(LOG_GROUP, log_text, parse_mode=ParseMode.HTML)
 
 
 @Client.on_message(filters.command("tban"))
@@ -149,7 +183,9 @@ async def tban_cmd(client, message):
 
     if len(args) < 3 and not message.reply_to_message:
         return await message.reply_text(
-            "Usage:\n/tban <user> <time> <reason>"
+            "⚠️ <b>Usage</b>\n\n"
+            "<code>/tban user 10m reason</code>",
+            parse_mode=ParseMode.HTML
         )
 
     target = await resolve_user(client, message)
@@ -157,7 +193,7 @@ async def tban_cmd(client, message):
     if not target:
         return
 
-    time_str = args[2] if message.reply_to_message else args[2]
+    time_str = args[2]
 
     seconds = 0
 
@@ -180,7 +216,7 @@ async def tban_cmd(client, message):
             INSERT INTO gbans (user_id, reason, banned_by, expire_at)
             VALUES ($1,$2,$3,$4)
             ON CONFLICT (user_id)
-            DO UPDATE SET expire_at=$4, reason=$2
+            DO UPDATE SET expire_at=$4, reason=$2, banned_by=$3
             """,
             target.id,
             reason,
@@ -188,13 +224,26 @@ async def tban_cmd(client, message):
             expire
         )
 
-    await message.reply_text(
-        f"⏳ <b>Temporary Ban Applied</b>\n\n"
-        f"<b>User:</b> {target.mention}\n"
-        f"<b>Reason:</b> {reason}\n"
-        f"<b>Expires:</b> {expire}",
-        parse_mode=ParseMode.HTML
+    text = (
+        "⏳ <b>Temporary Ban Applied</b>\n"
+        f"👤 <b>User:</b> {target.mention}\n"
+        f"📝 <b>Reason:</b> {reason}\n"
+        f"⏱ <b>Expires:</b> {expire}\n"
+        f"👮 <b>Banned By:</b> {message.from_user.mention}"
     )
+
+    await message.reply_text(text, parse_mode=ParseMode.HTML)
+
+    log_text = (
+        "⏳ <b>TEMP BAN</b>\n\n"
+        f"👤 <b>User:</b> {target.mention}\n"
+        f"🆔 <code>{target.id}</code>\n"
+        f"👮 <b>Banned By:</b> {message.from_user.mention}\n"
+        f"📝 <b>Reason:</b> {reason}\n"
+        f"⏱ <b>Expires:</b> {expire}"
+    )
+
+    await client.send_message(LOG_GROUP, log_text, parse_mode=ParseMode.HTML)
 
 
 @Client.on_message(filters.command("gbans"))
@@ -211,19 +260,33 @@ async def list_gbans(client, message):
         )
 
     if not rows:
-        return await message.reply_text("No global bans.")
+        return await message.reply_text("No active bans.")
 
     text = "🚫 <b>Global Ban List</b>\n\n"
 
     for r in rows:
 
-        line = f"• <code>{r['user_id']}</code>"
+        try:
+            user = await client.get_users(r["user_id"])
+            name = user.mention
+        except:
+            name = f"<code>{r['user_id']}</code>"
+
+        try:
+            banner = await client.get_users(r["banned_by"])
+            banner_name = banner.mention
+        except:
+            banner_name = f"<code>{r['banned_by']}</code>"
+
+        line = f"👤 {name}"
 
         if r["reason"]:
-            line += f"\n   Reason: {r['reason']}"
+            line += f"\n📝 {r['reason']}"
+
+        line += f"\n👮 Banned By: {banner_name}"
 
         if r["expire_at"]:
-            line += f"\n   Expires: {r['expire_at']}"
+            line += f"\n⏳ Expires: {r['expire_at']}"
 
         text += line + "\n\n"
 
