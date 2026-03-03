@@ -38,6 +38,7 @@ async def team_mode_selected(client, query):
         reply_markup=buttons
     )
 
+
 @Client.on_callback_query(filters.regex("^host_select$"))
 async def confirm_host(client, query):
     user = query.from_user
@@ -94,8 +95,7 @@ async def confirm_host(client, query):
         ),
         parse_mode=ParseMode.HTML
     )
-)
-
+    
 @Client.on_callback_query(filters.regex("^mode_cancel$"))
 async def cancel_game(client, query):
     await query.answer()
