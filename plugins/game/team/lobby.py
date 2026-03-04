@@ -11,7 +11,6 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import ChatAdminRequired
 
 from PIL import Image, ImageDraw, ImageFont
-from plugins.moderation.bans import banned_check
 from plugins.game.team import ACTIVE_MATCHES
 from plugins.game.team.state import GROUP_COOLDOWN
 
@@ -231,7 +230,6 @@ async def rejoin_timer(client, chat_id):
         pass
 
 @Client.on_message(filters.command(["join_teamA", "join_teamB"]) & filters.group)
-@banned_check
 async def join_team_logic(client, message):
     chat_id = message.chat.id
     user = message.from_user
@@ -567,19 +565,6 @@ async def add_player(client, message):
                     failed_details.append(f"• <code>{target}</code> — invalid user")
                     continue
 
-                # 🚫 BAN CHECK
-                banned = await conn.fetchrow(
-                    "SELECT reason FROM user_bans WHERE user_id=$1",
-                    target.id
-                )
-
-                if banned:
-                    reason = banned["reason"] or "No reason"
-                    failed_details.append(
-                        f"• {target.first_name} — 🚫 banned ({reason})"
-                    )
-                    continue
-
                 # Check if user already in another match
                 other = await user_in_other_game(target.id, chat_id)
                 if other:
@@ -659,7 +644,7 @@ async def add_player(client, message):
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True
     )
-
+    
 @Client.on_message(filters.command("remove") & filters.group)
 @host_only
 async def remove_player(client, message):
