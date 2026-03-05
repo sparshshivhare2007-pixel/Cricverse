@@ -834,10 +834,10 @@ Give 4–5 lines:
 async def end_match(match, forced: bool = False):
     import asyncio
     import httpx
-    from utils.logger import send_match_log
 
     client = match.get("client")
     chat_id = match.get("chat_id")
+    
     LOG_GC_ID = -1003692127639
 
     balls_played = match.get("total_balls", 0)
@@ -870,12 +870,15 @@ async def end_match(match, forced: bool = False):
         winner_key = "No Result"
         margin = "Stopped by host."
 
-    res_title = "🏏 MATCH COMPLETE" if winner_key not in ("Tie", "No Result") else "🤝 MATCH TIED"
+    res_title = "🏏 𝗠𝗔𝗧𝗖𝗛 𝗖𝗢𝗠𝗣𝗟𝗘𝗧𝗘" if winner_key not in ("Tie", "No Result") else "🤝 𝗠𝗔𝗧𝗖𝗛 𝗧𝗜𝗘𝗗"
 
-    await client.send_message(
-        chat_id,
-        f"{res_title}\n\n🏆 Team {winner_key} {margin}"
-    )
+    try:
+        await client.send_message(
+            chat_id,
+            f"{res_title}\n\n🏆 Team {winner_key} {margin}"
+        )
+    except:
+        pass
 
     match["phase"] = "finished"
 
@@ -886,26 +889,22 @@ async def end_match(match, forced: bool = False):
         print("Stats Save Error:", e)
 
     try:
+        from utils.logger import send_match_log
         log_match = {
             "game_id": str(match.get("game_id")),
             "chat_id": chat_id,
             "host_id": match.get("host_id"),
             "host_name": match.get("host_name", "Unknown")
         }
-
-        await send_match_log(
-            client,
-            "🏁 MATCH COMPLETED",
-            log_match,
-            "Match completed and stats saved."
-        )
+        await send_match_log(client, "🏁 MATCH COMPLETED", log_match, "Match completed and stats saved.")
     except Exception as e:
-        print("Logger Error:", e)
+        print("Logger skipped or Error:", e)
 
     from plugins.game.team import ACTIVE_MATCHES
     ACTIVE_MATCHES.pop(chat_id, None)
 
     try:
+        from database.connection import db 
         async with db.pool.acquire() as conn:
             await conn.execute(
                 "UPDATE games SET status = 'ended' WHERE game_id = $1",
@@ -934,13 +933,7 @@ async def end_match(match, forced: bool = False):
                     p = players[best_id]
                     name = match.get("user_cache", {}).get(best_id, "Player")
 
-                    prompt = f"""
-Player: {name}
-Runs: {p.get('runs',0)}
-Wickets: {p.get('wickets',0)}
-
-Give a short 2–3 line cricket analysis.
-"""
+                    prompt = f"Player: {name}\nRuns: {p.get('runs',0)}\nWickets: {p.get('wickets',0)}\nGive a short 2–3 line cricket analysis."
 
                     payload = {
                         "model": "meta/llama-3.1-70b-instruct",
@@ -953,29 +946,33 @@ Give a short 2–3 line cricket analysis.
                     }
 
                     headers = {
-                        "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                        "Authorization": f"Bearer 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",
                         "Content-Type": "application/json"
                     }
 
                     analysis = ""
                     try:
                         async with httpx.AsyncClient(timeout=8) as ai:
-                            r = await ai.post(NVIDIA_ENDPOINT, json=payload, headers=headers)
+                            r = await ai.post("https://integrate.api.nvidia.com/v1/chat/completions", json=payload, headers=headers)
                             analysis = r.json()["choices"][0]["message"]["content"]
                     except Exception:
                         analysis = "Clutch performance when it mattered most."
 
                     potm_text = (
-                        "🏅 PLAYER OF THE MATCH\n"
+                        "🏅 𝗣𝗟𝗔𝗬𝗘𝗥 𝗢𝗙 𝗧𝗛𝗘 𝗠𝗔𝗧𝗖𝗛\n"
                         "──────────────\n"
                         f"👤 {name}\n"
                         f"🏏 Runs: {p.get('runs',0)}\n"
                         f"🎯 Wickets: {p.get('wickets',0)}\n\n"
-                        f"{analysis}"
+                        f"🧠 {analysis}"
                     )
 
                     await client.send_message(chat_id, potm_text)
-                    await client.send_message(LOG_GC_ID, potm_text)
+                    
+                    try:
+                        await client.send_message(LOG_GC_ID, potm_text)
+                    except:
+                        pass
 
             from plugins.game.team.summaries import build_match_summary
             summary_text = await build_match_summary(client, match, winner_key)
@@ -991,12 +988,20 @@ Give a short 2–3 line cricket analysis.
                 buf = await get_graph_buffer(match)
 
                 await client.send_photo(chat_id, photo=buf, caption=caption)
-                await client.send_photo(LOG_GC_ID, photo=buf, caption=caption)
+                
+                try:
+                    await client.send_photo(LOG_GC_ID, photo=buf, caption=caption)
+                except:
+                    pass
             except Exception:
                 await client.send_message(chat_id, caption)
-                await client.send_message(LOG_GC_ID, caption)
+                try:
+                    await client.send_message(LOG_GC_ID, caption)
+                except:
+                    pass
 
         except Exception as e:
             print("❌ Post-match task error:", e)
 
     asyncio.create_task(post_match_extras())
+    
