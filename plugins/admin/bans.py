@@ -9,19 +9,19 @@ async def restrict_cmd(client, message):
     args = message.command
     target_user = None
     reason = ""
-
+    
     if message.reply_to_message:
         target_user = message.reply_to_message.from_user
         if len(args) > 1:
             reason = message.text.split(maxsplit=1)[1]
         else:
-            return await message.reply_text("⚠️ <b>Format:</b> Reply to a user and type <code>/restrict <reason></code>", parse_mode=ParseMode.HTML)
+            return await message.reply_text("⚠️ <b>Format:</b> Reply to a user and type <code>/restrict [reason]</code>", parse_mode=ParseMode.HTML)
             
     else:
         if len(args) < 3:
             return await message.reply_text(
-                "⚠️ <b>Format:</b> <code>/restrict <User_ID or @Username> <reason></code>\n"
-                "Or simply reply to a user's message with <code>/restrict <reason></code>",
+                "⚠️ <b>Format:</b> <code>/restrict [User_ID or @Username] [reason]</code>\n"
+                "Or simply reply to a user's message with <code>/restrict [reason]</code>",
                 parse_mode=ParseMode.HTML
             )
         
@@ -63,7 +63,7 @@ async def unrestrict_cmd(client, message):
     else:
         if len(args) < 2:
             return await message.reply_text(
-                "⚠️ <b>Format:</b> <code>/unrestrict <User_ID or @Username></code>\n"
+                "⚠️ <b>Format:</b> <code>/unrestrict [User_ID or @Username]</code>\n"
                 "Or simply reply to a user's message with <code>/unrestrict</code>",
                 parse_mode=ParseMode.HTML
             )
