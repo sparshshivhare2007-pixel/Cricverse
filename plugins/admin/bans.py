@@ -1,8 +1,8 @@
 from pyrogram import Client, filters
 from database.restrictions import restrict_user, unrestrict_user
-from config import Config
+from config import Config 
 
-@Client.on_message(filters.command("restrict") & filters.user(Config.OWNER_IDS))
+@Client.on_message(filters.command("restrict") & filters.user(list(Config.OWNER_IDS)))
 async def restrict_cmd(client, message):
     args = message.command
     target_user = None
@@ -14,7 +14,7 @@ async def restrict_cmd(client, message):
             reason = message.text.split(maxsplit=1)[1]
         else:
             return await message.reply_text("⚠️ **Format:** Reply to a user and type `/restrict <reason>`")
-          
+            
     else:
         if len(args) < 3:
             return await message.reply_text(
@@ -23,7 +23,7 @@ async def restrict_cmd(client, message):
             )
         
         user_identifier = args[1]
-        reason = message.text.split(maxsplit=2)[2]
+        reason = message.text.split(maxsplit=2)[2] 
         
         wait_msg = await message.reply_text("🔍 Fetching user details...")
         try:
@@ -45,7 +45,7 @@ async def restrict_cmd(client, message):
         f"📌 **Reason:** {reason}"
     )
 
-@Client.on_message(filters.command("unrestrict") & filters.user(Config.OWNER_IDS))
+@Client.on_message(filters.command("unrestrict") & filters.user(list(Config.OWNER_IDS)))
 async def unrestrict_cmd(client, message):
     args = message.command
     target_user = None
@@ -80,4 +80,4 @@ async def unrestrict_cmd(client, message):
     await message.reply_text(
         f"✅ **{target_user.first_name}** (`{target_user.id}`) is now free to play and host matches again!"
     )
-  
+    
