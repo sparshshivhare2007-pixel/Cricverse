@@ -917,7 +917,7 @@ async def end_match(match, forced: bool = False):
 
     print(f"✅ Match {match.get('game_id')} cleanup done")
 
-   async def post_match_extras():
+    async def post_match_extras():
         try:
             from plugins.game.team.summaries import build_match_summary
             summary_text = await build_match_summary(client, match, winner_key)
