@@ -17,15 +17,15 @@ async def restrict_cmd(client, message):
         else:
             return await message.reply_text(
                 "⚠️ <b>Format:</b> Reply to a user and type <code>/restrict &lt;reason&gt;</code>",
-                parse_mode="html"
+                parse_mode="HTML"
             )
 
     else:
         if len(args) < 3:
             return await message.reply_text(
                 "⚠️ <b>Format:</b> <code>/restrict &lt;User_ID or @Username&gt; &lt;reason&gt;</code>\n"
-                "Or simply reply to a user's message with <code>/restrict &lt;reason&gt;</code>",
-                parse_mode="html"
+                "Or reply to a user's message with <code>/restrict &lt;reason&gt;</code>",
+                parse_mode="HTML"
             )
 
         user_identifier = args[1]
@@ -42,8 +42,8 @@ async def restrict_cmd(client, message):
 
         except Exception as e:
             return await wait_msg.edit_text(
-                f"❌ <b>Error:</b> User not found. Make sure they have started the bot.\n<code>{escape(str(e))}</code>",
-                parse_mode="html"
+                f"❌ <b>Error:</b> User not found.\n<code>{escape(str(e))}</code>",
+                parse_mode="HTML"
             )
 
     if not target_user:
@@ -52,11 +52,13 @@ async def restrict_cmd(client, message):
     await restrict_user(target_user.id, reason, message.from_user.id)
 
     name = escape(target_user.first_name)
+    reason = escape(reason)
 
     await message.reply_text(
-        f"⛔ <b>{name}</b> (<code>{target_user.id}</code>) has been restricted from playing.\n"
-        f"📌 <b>Reason:</b> {escape(reason)}",
-        parse_mode="html"
+        f"⛔ <b>User Restricted</b>\n\n"
+        f"👤 <b>{name}</b> [<code>{target_user.id}</code>]\n"
+        f"📌 <b>Reason:</b> {reason}",
+        parse_mode="HTML"
     )
 
 
@@ -72,8 +74,8 @@ async def unrestrict_cmd(client, message):
         if len(args) < 2:
             return await message.reply_text(
                 "⚠️ <b>Format:</b> <code>/unrestrict &lt;User_ID or @Username&gt;</code>\n"
-                "Or simply reply to a user's message with <code>/unrestrict</code>",
-                parse_mode="html"
+                "Or reply to a user's message with <code>/unrestrict</code>",
+                parse_mode="HTML"
             )
 
         user_identifier = args[1]
@@ -90,7 +92,7 @@ async def unrestrict_cmd(client, message):
         except Exception as e:
             return await wait_msg.edit_text(
                 f"❌ <b>Error:</b> User not found.\n<code>{escape(str(e))}</code>",
-                parse_mode="html"
+                parse_mode="HTML"
             )
 
     if not target_user:
@@ -101,8 +103,9 @@ async def unrestrict_cmd(client, message):
     name = escape(target_user.first_name)
 
     await message.reply_text(
-        f"✅ <b>{name}</b> (<code>{target_user.id}</code>) is now free to play and host matches again!",
-        parse_mode="html"
+        f"✅ <b>User Unrestricted</b>\n\n"
+        f"👤 <b>{name}</b> [<code>{target_user.id}</code>] can now play and host matches again.",
+        parse_mode="HTML"
     )
 
 
@@ -114,10 +117,10 @@ async def restricted_list_cmd(client, message):
     if not users:
         return await message.reply_text(
             "✅ <b>No users are currently restricted.</b>",
-            parse_mode="html"
+            parse_mode="HTML"
         )
 
-    text = "⛔ <b>Restricted Users List</b>\n\n"
+    text = "⛔ <b>Restricted Users</b>\n\n"
 
     for i, user in enumerate(users, start=1):
         user_id = user.get("user_id")
@@ -126,4 +129,4 @@ async def restricted_list_cmd(client, message):
         text += f"{i}. <code>{user_id}</code>\n"
         text += f"   📌 Reason: {reason}\n\n"
 
-    await message.reply_text(text, parse_mode="html")
+    await message.reply_text(text, parse_mode="HTML")
