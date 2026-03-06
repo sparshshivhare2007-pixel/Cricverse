@@ -686,7 +686,6 @@ async def end_innings(match):
     client = match.get("client")
     if not client:
         print("❌ CRITICAL: client missing in end_innings")
-
         match["bowled"] = False
         match["batted"] = False
         match["prompt_dispatched"] = False
@@ -702,6 +701,9 @@ async def end_innings(match):
         return
 
     if match.get("innings", 1) == 1:
+        from pyrogram.enums import ParseMode
+        import asyncio
+        import random
 
         bat_snapshot = match.get("teams", {}).get(current_batting_team, {}).copy()
         balls_snapshot = bat_snapshot.get("balls", 0)
@@ -716,6 +718,7 @@ async def end_innings(match):
         new_batting_team = match["batting_team"]
         match["phase"] = "READY"
 
+        from database.connection import db
         async with db.pool.acquire() as conn:
             async with conn.transaction():
                 await conn.execute(
@@ -748,86 +751,65 @@ async def end_innings(match):
         from plugins.game.team.over_engine import update_game_in_db, build_innings_summary
         await update_game_in_db(match)
 
-        innings_text = await build_innings_summary(client, match)
-
-        try:
-            from plugins.utilities.graph import get_graph_buffer
-            buf = await get_graph_buffer(match)
-            await client.send_photo(
-                chat_id=chat_id,
-                photo=buf,
-                caption=innings_text,
-                parse_mode=ParseMode.HTML
-            )
-        except Exception as e:
-            print(f"Graph Error in end_innings: {e}")
-            try:
-                await client.send_message(chat_id, innings_text)
-            except:
-                pass
-
-        try:
-            import asyncio, random
-
-            await asyncio.sleep(2)
-
-            runs = bat_snapshot.get("runs", 0)
-            wickets = bat_snapshot.get("wickets", 0)
-            overs = match.get("overs", 0)
-            balls = balls_snapshot
-
-            run_rate = (runs / (balls / 6)) if balls > 0 else 0
-
-            moods = [
-                "funny & savage",
-                "calm but ruthless",
-                "professional with spice"
-            ]
-
-            prompt = f"""
-You are a cricket analyst.
-Tone: {random.choice(moods)}.
-Short, punchy, Telegram-friendly.
-
-Innings Summary:
-Runs: {runs}
-Wickets: {wickets}
-Overs: {overs}
-Run Rate: {run_rate:.2f}
-
-Give 4–5 lines:
-• How the innings went
-• One savage observation
-• One tactical takeaway for the chase
-"""
-
-            analysis = await get_ai_analysis(prompt)
-
-            await client.send_message(
-                chat_id,
-                (
-                    "🧠 <b>AI INNINGS ANALYSIS</b>\n"
-                    "────┈┄┄╌╌╌╌┄┄┈────\n\n"
-                    f"{analysis}\n\n"
-                    "────┈┄┄╌╌╌╌┄┄┈────\n"
-                    "✨ Nexora AI"
-                ),
-                parse_mode=ParseMode.HTML
-            )
-
-        except Exception as e:
-            print("❌ AI Innings Analysis Error:", e)
-
         await client.send_message(
             chat_id,
             (
                 "🚀 <b>Innings Break</b>\n\n"
                 f"🎯 Target: <b>{match['target']} runs</b>\n"
                 f"🏟 Team {match['batting_team']} needs {match['target']} to win.\n\n"
-                "👉 Batting Captain, use /batting number to set openers!"
+                "👉 Batting Captain, use <code>/batting 1</code> to set openers!"
             ),
             parse_mode=ParseMode.HTML
         )
+
+        async def post_innings_extras():
+            innings_text = await build_innings_summary(client, match)
+            try:
+                from plugins.utilities.graph import get_graph_buffer
+                buf = await get_graph_buffer(match)
+                await client.send_photo(
+                    chat_id=chat_id,
+                    photo=buf,
+                    caption=innings_text,
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception as e:
+                print(f"Graph Error in end_innings: {e}")
+                try:
+                    await client.send_message(chat_id, innings_text)
+                except:
+                    pass
+
+            try:
+                runs = bat_snapshot.get("runs", 0)
+                wickets = bat_snapshot.get("wickets", 0)
+                overs = match.get("overs", 0)
+                balls = balls_snapshot
+                run_rate = (runs / (balls / 6)) if balls > 0 else 0
+
+                moods = ["funny & savage", "calm but ruthless", "professional with spice"]
+                prompt = f"""
+You are a cricket analyst. Tone: {random.choice(moods)}. Short, punchy, Telegram-friendly.
+Innings Summary: Runs: {runs}, Wickets: {wickets}, Overs: {overs}, Run Rate: {run_rate:.2f}
+Give 4–5 lines: How the innings went, one savage observation, one tactical takeaway for the chase.
+"""
+                analysis = await get_ai_analysis(prompt)
+
+                await client.send_message(
+                    chat_id,
+                    (
+                        "🧠 <b>AI INNINGS ANALYSIS</b>\n"
+                        "────┈┄┄╌╌╌╌┄┄┈────\n\n"
+                        f"{analysis}\n\n"
+                        "────┈┄┄╌╌╌╌┄┄┈────\n"
+                        "✨ Nexora AI"
+                    ),
+                    parse_mode=ParseMode.HTML
+                )
+            except Exception as e:
+                print("❌ AI Innings Analysis Error:", e)
+
+        asyncio.create_task(post_innings_extras())
         return
 
     from plugins.game.team.over_engine import end_match
