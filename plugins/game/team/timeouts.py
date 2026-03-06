@@ -29,8 +29,9 @@ async def start_timer(match, role):
 
     await client.send_message(
         chat_id,
-        f"⏳ <b>30 seconds gone…</b>\n"
-        f"{mention}, crowd’s watching 👀 Don’t ice the game 😄",
+        f"⏳ <b>30 seconds gone.</b>\n"
+        f"{mention} still thinking like it's a chess match.\n"
+        "This is cricket 😭",
         parse_mode=ParseMode.HTML
     )
 
@@ -41,8 +42,8 @@ async def start_timer(match, role):
 
     await client.send_message(
         chat_id,
-        f"⚠️ <b>10 seconds left!</b>\n"
-        f"{mention}, now or never — hesitation won’t make highlights 😉",
+        f"⚠️ <b>10 seconds remaining.</b>\n"
+        f"{mention}, either play now or let the clock do it.",
         parse_mode=ParseMode.HTML
     )
 
@@ -52,6 +53,7 @@ async def start_timer(match, role):
     if role == "batter" and (match.get("batted") or not match.get("bowled")): return
 
     await handle_timeout(match, role)
+
 
 async def handle_timeout(match, role):
     client = match["client"]
@@ -76,10 +78,10 @@ async def handle_timeout(match, role):
         await client.send_message(
             chat_id,
             (
-                "🚩 <b>TIME WARNING</b>\n\n"
-                f"{mention} is taking too long.\n"
-                "The clock is ticking and the crowd is restless ⏳\n\n"
-                "⚠️ <b>Next delay:</b> -6 runs & automatic removal."
+                "🚩 <b>TIME WARNING</b>\n"
+                f"{mention} freezing under pressure.\n"
+                "The clock doesn’t wait for anyone ⏳\n"
+                "⚠️ <b>Next delay:</b> -6 runs & instant removal."
             ),
             parse_mode=ParseMode.HTML
         )
@@ -99,13 +101,13 @@ async def handle_timeout(match, role):
         print(f"Penalty DB Error: {e}")
 
     penalty_msg = (
-        "🚫 <b>TIMEOUT – STRIKE 2</b>\n\n"
-        f"{mention} fails to respond in time ⏰\n"
-        f"🧮 <b>Team {team_key}</b> penalized <b>-6 runs</b>.\n\n"
+        "🚫 <b>CLOCK WINS</b>\n\n"
+        f"{mention} couldn't beat the timer ⏰\n"
+        f"🧮 <b>Team {team_key}</b> punished with <b>-6 runs</b>.\n"
     )
 
     if role == "batter":
-        penalty_msg += "☝️ <b>Batter is OUT</b> — beaten by the clock.\n\n"
+        penalty_msg += "☝️ <b>Batter is OUT</b> — defeated by the clock.\n"
         
         await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
     
@@ -117,8 +119,8 @@ async def handle_timeout(match, role):
         match["current_bowler"] = None
 
         penalty_msg += (
-            "🎳 <b>Bowler removed from the attack.</b>\n\n"
-            "🧢 <b>Bowling Captain</b>, choose a new bowler:\n"
+            "🎳 <b>Bowler removed from the attack.</b>\n"
+            "🧢 <b>Bowling Captain</b>, pick a new bowler:\n"
             "<code>/bowling &lt;number&gt;</code>"
         )
         
@@ -138,4 +140,3 @@ async def handle_timeout(match, role):
                 task.cancel()
             except Exception:
                 pass
-                
