@@ -6,8 +6,8 @@ from database.groups import add_group, total_groups
 from config import Config
 
 
-OWNER_ID = 8084629653
-OWNER_NAME = "𝑲𝑰𝑵𝑮 ˹𐩃𝑲˼║ ツ"
+OWNER_ID = 8585494095
+OWNER_NAME = "⏤͟͞𝗗𝗥𝗘𝗫𝗢〆"
 
 @Client.on_chat_member_updated()
 async def chat_member_handler(client: Client, update: ChatMemberUpdated):
