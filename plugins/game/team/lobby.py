@@ -241,47 +241,53 @@ async def join_team_logic(client, message):
     match = ACTIVE_MATCHES.get(chat_id)
 
     if not match:
-        return await message.reply_text("😴 No match running right now.\nStart one first and I’m in 🏏")
+        return await message.reply_text("😴 No active match right now.")
 
     cmd = message.command[0].lower()
     target_team = "A" if "teama" in cmd else "B"
     
     if user.id in match["teams"]["A"]["players"] or user.id in match["teams"]["B"]["players"]:
-        return await message.reply_text("😏 You’re already on the field, champ.\nNo need to join twice — this isn’t multiverse cricket 🌀")
+        return await message.reply_text("😏 You're already in the match.")
 
     async with db.pool.acquire() as conn:
-        active_game = await conn.fetchrow("SELECT g.chat_id, g.title FROM game_players gp JOIN games g ON gp.game_id = g.game_id WHERE gp.user_id = $1 AND g.status = 'active'", user.id)
+        active_game = await conn.fetchrow(
+            "SELECT g.chat_id, g.title FROM game_players gp JOIN games g ON gp.game_id = g.game_id WHERE gp.user_id = $1 AND g.status = 'active'",
+            user.id
+        )
 
         if active_game:
             group_title = active_game["title"] or "another group"
             return await message.reply_text(
-                "🛑 Hold up!\n"
-                f"You’re already battling it out in <b>{group_title}</b>.\n"
-                "Finish that match first — no double-duty legends allowed 😤",
+                f"🛑 You're already playing in <b>{group_title}</b>.\nFinish that match first.",
                 parse_mode=ParseMode.HTML
             )
 
     current_phase = match.get("phase")
     allowed_phase = f"TEAM_{target_team}_JOIN"
     if current_phase not in (allowed_phase, "JOINING"):
-        return await message.reply_text(f"🚪 Team {target_team} doors are closed.\nMissed the bus, maybe next match 🚌💨")
+        return await message.reply_text(f"🚪 Team {target_team} join phase closed.")
 
     async with db.pool.acquire() as conn:
         await ensure_user_exists(conn, user)
-        await conn.execute("INSERT INTO game_players (game_id, user_id, team) VALUES ($1, $2, $3)", match["game_id"], user.id, target_team)
+        await conn.execute(
+            "INSERT INTO game_players (game_id, user_id, team) VALUES ($1, $2, $3)",
+            match["game_id"],
+            user.id,
+            target_team
+        )
 
     match["teams"][target_team]["players"].append(user.id)
     match["user_cache"][user.id] = user.first_name
 
     join_messages = [
-        f"🔥 <b>{user.first_name}</b> walks into <b>Team {target_team}</b> with quiet confidence.\nSolid stance, steady heartbeat — this could be serious business 👀",
-        f"🏏 <b>{user.first_name}</b> joins <b>Team {target_team}</b>.\nFresh pads, fresh mindset… now let’s see if it’s class or collapse 😏",
-        f"📊 <b>{user.first_name}</b> drafted into <b>Team {target_team}</b>.\nIntent looks aggressive — risk-reward ratio loading 📈📉",
-        f"😈 <b>{user.first_name}</b> storms into <b>Team {target_team}</b>.\nBig confidence shown early… pressure’s officially on now 💥",
+        f"🏏 <b>{user.first_name}</b> joined <b>Team {target_team}</b>.",
+        f"🔥 <b>{user.first_name}</b> enters <b>Team {target_team}</b>.",
+        f"⚡ <b>{user.first_name}</b> locked in for <b>Team {target_team}</b>.",
+        f"🎯 <b>{user.first_name}</b> added to <b>Team {target_team}</b>.",
     ]
 
     await message.reply_text(random.choice(join_messages), parse_mode=ParseMode.HTML)
-
+    
 @Client.on_message(filters.command(["members", "teams"]) & filters.group)
 async def members(client, message):
     chat_id = message.chat.id
