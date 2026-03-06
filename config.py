@@ -11,12 +11,12 @@ class Config:
     BOT_USERNAME = "@CricketLegacy2Bot"
     SUPPORT_GROUP = "https://t.me/+joF1bCfiMT9jMzVh"
     PLAY_ZONE_INFO = "https://t.me/+joF1bCfiMT9jMzVh"
-    OWNER_IDS = {8084629653} 
+    OWNER_IDS = {8585494095} 
 
     NVIDIA_API_KEY = "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"
 
-    START_IMAGE = "https://graph.org/file/4bb1b361de5ad086c9978-e0b4b80898c072471f.jpg"
+    START_IMAGE = "https://graph.org/file/a37d935e98e4c92e04cee-c1871cfafb3f808563.jpg"
 
-    LOG_CHANNEL = -1003527724170
+    LOG_CHANNEL = -1003692127639
 
 
