@@ -6,8 +6,8 @@ from plugins.game.team import ACTIVE_MATCHES
 from database.connection import db
 
 async def auto_clean_matches(client):
-    """Background task to kill inactive matches and warn hosts EVERY MINUTE"""
-    print("🧹 Match GC with EVERY MINUTE Warnings Started...")
+    """Background task to kill inactive matches ONLY when game is LIVE"""
+    print("🧹 Match GC with EVERY MINUTE Warnings Started (Only for LIVE matches)...")
     
     while True:
         await asyncio.sleep(20)
@@ -16,6 +16,12 @@ async def auto_clean_matches(client):
         stale_chats = []
 
         for chat_id, match in list(ACTIVE_MATCHES.items()):
+            current_phase = match.get("phase", "UNKNOWN")
+
+            if current_phase != "LIVE":
+                match["last_active"] = now 
+                continue
+
             if "last_active" not in match:
                 match["last_active"] = now
             
@@ -48,7 +54,6 @@ async def auto_clean_matches(client):
                         parse_mode=ParseMode.HTML
                     )
                 except Exception as e:
-                    print(f"Warning send failed: {e}")
                     pass
 
         for chat_id in stale_chats:
@@ -62,7 +67,7 @@ async def auto_clean_matches(client):
                 await client.send_message(
                     chat_id,
                     "☠️ <b>MATCH ABORTED!</b>\n\n"
-                    "No activity for 10 minutes. The match has been automatically ended.\n"
+                    "Match has been automatically ended due to inactivity.\n"
                     "Players are now free to play elsewhere.",
                     parse_mode=ParseMode.HTML
                 )
