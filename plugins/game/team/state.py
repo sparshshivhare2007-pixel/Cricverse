@@ -268,6 +268,8 @@ async def batter_handler(client, message):
     chat_id = message.chat.id
 
     match = ACTIVE_MATCHES.get(chat_id)
+    if match:
+        match["last_active"] = time.time()
 
     if (
         not match
