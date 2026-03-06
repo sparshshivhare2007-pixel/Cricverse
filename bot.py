@@ -32,6 +32,10 @@ async def start_nexora():
         if not m.get("client"):
             m["client"] = bot
 
+    from plugins.game.team.cleanup import auto_clean_matches
+    asyncio.create_task(auto_clean_matches(bot))
+    print("🧹 Background Garbage Collector is active!")
+
     await idle()
 
     print("🛑 Shutting down...")
@@ -43,3 +47,4 @@ if __name__ == "__main__":
         asyncio.get_event_loop().run_until_complete(start_nexora())
     except KeyboardInterrupt:
         print("👋 Bot stopped manually.")
+        
