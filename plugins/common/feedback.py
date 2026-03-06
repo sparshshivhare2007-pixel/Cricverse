@@ -9,8 +9,8 @@ DIV = "───┈┄┄╌╌╌╌┄┄┈───"
 async def feedback_cmd(client, message):
     if len(message.command) < 2:
         return await message.reply_text(
-            f"💬 <b>FEEDBACK CENTER</b>\n{DIV}\n\n"
-            "Share your thoughts to help improve the bot.\n\n"
+            f"💬 <b>FEEDBACK CENTER</b>\n{DIV}\n"
+            "Share your thoughts to help improve the bot.\n"
             "<b>Usage:</b>\n"
             "<code>/feedback your message</code>",
             parse_mode=ParseMode.HTML
@@ -22,10 +22,10 @@ async def feedback_cmd(client, message):
 
     log = (
         "💬 <b>NEW FEEDBACK</b>\n"
-        f"{DIV}\n\n"
+        f"{DIV}\n"
         f"👤 <b>User:</b> {name}\n"
-        f"🆔 <code>{user.id}</code>\n\n"
-        f"📝 <b>Message:</b>\n{text}\n\n"
+        f"🆔 <code>{user.id}</code>\n"
+        f"📝 <b>Message:</b>{text}\n"
         "⭐ <b>Rating:</b> Pending"
     )
 
@@ -73,7 +73,7 @@ async def rating_handler(client, callback_query):
         pass
 
     await callback_query.message.edit_text(
-        f"⭐ <b>Rating Received</b>\n{DIV}\n\n"
+        f"⭐ <b>Rating Received</b>\n{DIV}\n"
         f"Thanks for rating the experience <b>{rating}/5</b>.\n"
         "Your support helps us improve.",
         parse_mode=ParseMode.HTML
@@ -83,8 +83,8 @@ async def rating_handler(client, callback_query):
 async def bug_cmd(client, message):
     if len(message.command) < 2:
         return await message.reply_text(
-            f"🐞 <b>BUG REPORT</b>\n{DIV}\n\n"
-            "Found something broken?\n\n"
+            f"🐞 <b>BUG REPORT</b>\n{DIV}\n"
+            "Found something broken?\n"
             "<b>Usage:</b>\n"
             "<code>/bug describe the issue</code>",
             parse_mode=ParseMode.HTML
@@ -98,7 +98,7 @@ async def bug_cmd(client, message):
         "🐞 <b>BUG REPORT RECEIVED</b>\n"
         f"{DIV}\n\n"
         f"👤 <b>User:</b> {name}\n"
-        f"🆔 <code>{user.id}</code>\n\n"
+        f"🆔 <code>{user.id}</code>\n"
         f"📝 <b>Issue:</b>\n{text}"
     )
 
@@ -108,7 +108,7 @@ async def bug_cmd(client, message):
         pass
 
     await message.reply_text(
-        f"📨 <b>Bug Report Submitted</b>\n{DIV}\n\n"
+        f"📨 <b>Bug Report Submitted</b>\n{DIV}\n"
         "Our developers have received your report.\n"
         "Thanks for helping improve the experience.",
         parse_mode=ParseMode.HTML
