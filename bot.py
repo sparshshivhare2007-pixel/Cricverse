@@ -24,6 +24,11 @@ async def start_nexora():
 
     try:
         await initialize_database()
+        
+        async with db.pool.acquire() as conn:
+            await conn.execute("UPDATE games SET status='ended' WHERE status='active'")
+        print("👻 All stuck players from the past have been FREED!")
+        
     except Exception as e:
         print(f"❌ Database Initialization Failed: {e}")
 
