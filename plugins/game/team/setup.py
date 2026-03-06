@@ -638,7 +638,7 @@ async def set_batting(client, message):
                 caption=(
                     f"🏏 <b>OPENERS READY!</b>\n"
                     f"🟢 <b>Striker:</b> {match['user_cache'].get(match['striker'])}\n"
-                    f"🟡 <b>Non-Striker:</b> {match['user_cache'].get(match['non_striker'])}\n\n"
+                    f"🟡 <b>Non-Striker:</b> {match['user_cache'].get(match['non_striker'])}\n"
                     f"🎯 <b>Bowling Captain</b>, choose your opening bowler:\n"
                     f"<code>/bowling &lt;number&gt;</code>"
                 ),
@@ -746,7 +746,7 @@ async def set_bowler(client, message):
             "balls_bowled": 0, "bowling_balls": [], "team": bowling_team, "is_out": False
         })
 
-        await message.reply_text(f"⚾ <b>{bowler_user.first_name}</b> is ready to bowl.")
+        await message.reply_text(f"⚾ <b>{bowler_user.first_name}</b> is now bowling.")
         from plugins.game.team.state import start_first_ball
         match["prompt_dispatched"] = False
         asyncio.create_task(start_first_ball(client, match))
