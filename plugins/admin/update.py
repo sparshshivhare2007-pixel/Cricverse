@@ -29,7 +29,7 @@ async def update_bot(client, message):
     commits = list(repo.iter_commits("HEAD..upstream/main"))
 
     if not commits:
-        return await msg.edit("✅ <b>Bot is already up to date.</b>")
+        return await msg.edit("🌺 <b>Bot is already up to date.</b>")
 
     text = "<b>📦 New Updates Available</b>\n\n"
 
