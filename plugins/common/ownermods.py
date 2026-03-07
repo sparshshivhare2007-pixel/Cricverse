@@ -20,6 +20,8 @@ from database.mods import (
 
 OWNER_ID = 8294062042
 BROADCAST_CACHE = {}
+BROADCAST_RUNNING = False
+BROADCAST_CANCEL = False
 BOT_START_TIME = time.time()
 
 def uptime():
@@ -186,38 +188,81 @@ async def mods_cmd(client, message):
 
 @Client.on_message(filters.command("broad"))
 async def broad_cmd(client, message):
+    global BROADCAST_RUNNING
+
     uid = message.from_user.id
 
     if uid != OWNER_ID and not await is_mod(uid, min_tier=2):
         return
+
+    if BROADCAST_RUNNING:
+        return await message.reply_text("⚠️ A broadcast is already running.")
+
+    args = message.text.split(maxsplit=2)
+
+    if len(args) < 2:
+        return await message.reply_text(
+            "Usage:\n"
+            "/broad -forward\n"
+            "/broad -copy\n"
+            "/broad -users\n"
+            "/broad -groups"
+        )
+
+    btype = args[1].replace("-", "").lower()
 
     text_payload = None
     source_msg = None
 
     if message.reply_to_message:
         source_msg = message.reply_to_message
+    elif len(args) >= 3:
+        text_payload = args[2]
     else:
-        args = message.text.split(maxsplit=1)
-        if len(args) < 2:
-            return await message.reply_text("Nothing to broadcast 🤨")
-        text_payload = args[1]
+        return await message.reply_text("Nothing to broadcast 🤨")
+
+    try:
+        async with db.pool.acquire() as conn:
+            user_rows = await conn.fetch("SELECT DISTINCT user_id FROM user_stats")
+            group_rows = await conn.fetch("SELECT DISTINCT chat_id FROM games")
+    except Exception as e:
+        print(e)
+        return await message.reply_text("DB error.")
+
+    users = [u["user_id"] for u in user_rows]
+    groups = [g["chat_id"] for g in group_rows]
+
+    if btype == "users":
+        targets = users
+    elif btype == "groups":
+        targets = groups
+    else:
+        targets = users + groups
+
+    total_users = len(users)
+    total_groups = len(groups)
 
     BROADCAST_CACHE[uid] = {
         "text": text_payload,
-        "source_msg": source_msg
+        "source_msg": source_msg,
+        "type": btype,
+        "targets": targets,
+        "users": users,
+        "groups": groups
     }
 
-    preview_text = (
-        "📣 <b>BROADCAST PREVIEW</b>\n\n"
-        "This is exactly how it will be sent.\n"
-        "Choose wisely 👇"
+    preview = (
+        f"📡 <b>Broadcast Receipt</b>\n\n"
+        f"👤 Users: <b>{total_users}</b>\n"
+        f"👥 Groups: <b>{total_groups}</b>\n"
+        f"🎯 Targets: <b>{len(targets)}</b>\n\n"
+        f"Type: <b>{btype}</b>"
     )
 
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🚀 Send Normally", callback_data="broad_send_normal"),
-                InlineKeyboardButton("📌 Send & Pin", callback_data="broad_send_pin")
+                InlineKeyboardButton("🚀 Start Broadcast", callback_data="broad_start")
             ],
             [
                 InlineKeyboardButton("❌ Cancel", callback_data="broad_cancel")
@@ -225,110 +270,158 @@ async def broad_cmd(client, message):
         ]
     )
 
+    await message.reply_text(preview, parse_mode=ParseMode.HTML, reply_markup=buttons)
+
     if source_msg:
         await source_msg.copy(message.chat.id)
     else:
-        await client.send_message(
-            chat_id=message.chat.id,
-            text=text_payload,
-            parse_mode=ParseMode.HTML
-        )
-
-    await client.send_message(
-        chat_id=message.chat.id,
-        text=preview_text,
-        parse_mode=ParseMode.HTML,
-        reply_markup=buttons
-    )
+        await client.send_message(message.chat.id, text_payload, parse_mode=ParseMode.HTML)
 
 @Client.on_callback_query(filters.regex("^broad_"))
 async def broad_callback(client, cb):
+    global BROADCAST_RUNNING, BROADCAST_CANCEL
+
     uid = cb.from_user.id
-
     data = BROADCAST_CACHE.get(uid)
+
     if not data:
-        await cb.answer("Broadcast expired 😴", show_alert=True)
-        return
+        return await cb.answer("Broadcast expired.")
 
-    action = cb.data
-    msg = cb.message
-    
-    if action == "broad_cancel":
+    if cb.data == "broad_cancel":
+        BROADCAST_CANCEL = True
         BROADCAST_CACHE.pop(uid, None)
-        await msg.edit_text("❎ Broadcast cancelled.")
+        await cb.message.edit_text("❎ Broadcast cancelled.")
         return
 
-    text_payload = data["text"]
+    if cb.data != "broad_start":
+        return
+
+    if BROADCAST_RUNNING:
+        return await cb.answer("Broadcast already running.", show_alert=True)
+
+    BROADCAST_RUNNING = True
+    BROADCAST_CANCEL = False
+
+    msg = cb.message
+
+    targets = data["targets"]
     source_msg = data["source_msg"]
+    text_payload = data["text"]
+    btype = data["type"]
 
-    try:
-        async with db.pool.acquire() as conn:
-            user_rows = await conn.fetch("SELECT DISTINCT user_id FROM user_stats")
-            group_rows = await conn.fetch("SELECT DISTINCT chat_id FROM games")
+    users = data["users"]
+    groups = data["groups"]
 
-        targets = [u["user_id"] for u in user_rows] + [g["chat_id"] for g in group_rows]
-
-    except Exception as e:
-        print("[BROADCAST DB ERROR]", e)
-        await msg.edit_text("⚠️ Failed to fetch broadcast targets.")
-        return
-
+    total_users = len(users)
+    total_groups = len(groups)
     total_targets = len(targets)
-    sent = 0
+
+    sent_users = 0
+    sent_groups = 0
+    success = 0
+    blocked = 0
+    deleted = 0
     failed = 0
 
-    await msg.edit_text(f"🚀 Broadcasting to {total_targets} targets… grab popcorn 🍿")
-
-    for i, tid in enumerate(targets, start=1):
-        try:
-            if source_msg:
-                sent_msg = await source_msg.copy(tid)
-            else:
-                sent_msg = await client.send_message(
-                    tid,
-                    text_payload,
-                    parse_mode=ParseMode.HTML
-                )
-
-            if action == "broad_send_pin":
-                try:
-                    await client.pin_chat_message(tid, sent_msg.id)
-                except Exception:
-                    pass
-
-            sent += 1
-            await asyncio.sleep(0.1)
-
-        except pyrogram.errors.FloodWait as e:
-            print(f"⏳ FloodWait: Sleeping for {e.value} seconds...")
-            await asyncio.sleep(e.value + 2)
-            failed += 1 
-        except Exception:
-            failed += 1
-            continue
-
-        if i % 50 == 0:
-            try:
-                await msg.edit_text(
-                    f"🚀 <b>Broadcasting Live...</b>\n\n"
-                    f"⏳ Progress: <b>{i} / {total_targets}</b>\n"
-                    f"📤 Sent: <b>{sent}</b>\n"
-                    f"❌ Failed: <b>{failed}</b>",
-                    parse_mode=ParseMode.HTML
-                )
-            except Exception:
-                pass
-
-    BROADCAST_CACHE.pop(uid, None)
-
-    await msg.edit_text(
-        f"✅ <b>Broadcast Completed!</b> 🎉\n\n"
-        f"🎯 Total Targets: <b>{total_targets}</b>\n"
-        f"📤 Successfully Sent: <b>{sent}</b>\n"
-        f"❌ Failed/Blocked: <b>{failed}</b>",
-        parse_mode=ParseMode.HTML
+    progress = await msg.edit_text(
+        "📡 <b>Broadcast Progressing...</b>\n\n"
+        f"◇ Total Users: {total_users}\n"
+        f"◇ Total Groups: {total_groups}\n"
+        f"◇ Sent PVT Messages: 0\n"
+        f"◇ Sent Group Messages: 0\n"
+        f"◇ Successful: 0\n"
+        f"◇ Blocked Users: 0\n"
+        f"◇ Deleted Accounts: 0\n"
+        f"◇ Unsuccessful: 0\n\n"
+        f"⏳ Progress: 0/{total_targets} (0%)",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⛔ Cancel Broadcast", callback_data="broad_cancel")]]
+        )
     )
 
+    for i, tid in enumerate(targets, start=1):
+
+        if BROADCAST_CANCEL:
+            BROADCAST_RUNNING = False
+            return await progress.edit_text("⛔ Broadcast cancelled midway.")
+
+        try:
+
+            if btype == "forward":
+                sent_msg = await source_msg.forward(tid)
+
+            elif btype == "copy":
+                sent_msg = await source_msg.copy(tid)
+
+            else:
+                if source_msg:
+                    sent_msg = await source_msg.copy(tid)
+                else:
+                    sent_msg = await client.send_message(
+                        tid,
+                        text_payload,
+                        parse_mode=ParseMode.HTML
+                    )
+
+            success += 1
+
+            if tid in users:
+                sent_users += 1
+            else:
+                sent_groups += 1
+
+            await asyncio.sleep(0.08)
+
+        except pyrogram.errors.UserIsBlocked:
+            blocked += 1
+
+        except pyrogram.errors.InputUserDeactivated:
+            deleted += 1
+
+        except pyrogram.errors.FloodWait as e:
+            await asyncio.sleep(e.value + 2)
+
+        except Exception:
+            failed += 1
+
+        if i % 40 == 0:
+
+            percent = round((i / total_targets) * 100, 2)
+
+            try:
+                await progress.edit_text(
+                    "📡 <b>Broadcast Progressing...</b>\n\n"
+                    f"◇ Total Users: {total_users}\n"
+                    f"◇ Total Groups: {total_groups}\n"
+                    f"◇ Sent PVT Messages: {sent_users}\n"
+                    f"◇ Sent Group Messages: {sent_groups}\n"
+                    f"◇ Successful: {success}\n"
+                    f"◇ Blocked Users: {blocked}\n"
+                    f"◇ Deleted Accounts: {deleted}\n"
+                    f"◇ Unsuccessful: {failed}\n\n"
+                    f"⏳ Progress: {i}/{total_targets} ({percent}%)",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("⛔ Cancel Broadcast", callback_data="broad_cancel")]]
+                    )
+                )
+            except:
+                pass
+
+    BROADCAST_RUNNING = False
+    BROADCAST_CACHE.pop(uid, None)
+
+    await progress.edit_text(
+        "✅ <b>Broadcast Completed</b>\n\n"
+        f"🎯 Total: {total_targets}\n"
+        f"📤 Success: {success}\n"
+        f"🚫 Blocked: {blocked}\n"
+        f"👻 Deleted: {deleted}\n"
+        f"❌ Failed: {failed}",
+        parse_mode=ParseMode.HTML
+    )
+    
 @Client.on_message(filters.command("leave"))
 async def leave_cmd(client, message):
     if not message.from_user or message.from_user.id != OWNER_ID:
