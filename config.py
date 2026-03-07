@@ -12,7 +12,8 @@ class Config:
     SUPPORT_GROUP = "https://t.me/+joF1bCfiMT9jMzVh"
     PLAY_ZONE_INFO = "https://t.me/+joF1bCfiMT9jMzVh"
     OWNER_IDS = {8585494095} 
-    UPSTREAM_REPO = "https://github.com/drexocoder-source/Cricsssketlegssacys"
+    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+    UPSTREAM_REPO = f"https://{GITHUB_TOKEN}@github.com/drexocoder-source/Cricsssketlegssacys"
     NVIDIA_API_KEY = "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"
 
     START_IMAGE = "https://graph.org/file/a37d935e98e4c92e04cee-c1871cfafb3f808563.jpg"
