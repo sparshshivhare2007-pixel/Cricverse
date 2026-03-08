@@ -899,20 +899,29 @@ async def end_match(match, forced: bool = False):
     team_a = teams.get("A", {"runs": 0, "wickets": 0, "players": []})
     team_b = teams.get("B", {"runs": 0, "wickets": 0, "players": []})
 
-    r_a, r_b = team_a["runs"], team_b["runs"]
-    w_a, w_b = team_a["wickets"], team_b["wickets"]
+    batting_second = match.get("batting_team", "B")
+    batting_first = match.get("bowling_team", "A")
 
-    if r_a > r_b:
-        winner_key = "A"
-        margin = f"won by {r_a - r_b} runs"
-    elif r_b > r_a:
-        winner_key = "B"
-        wickets_left = max(0, len(team_b["players"]) - w_b - 1)
-        margin = f"won by {wickets_left} wickets" if wickets_left > 0 else f"won by {r_b - r_a} runs"
+    t1_runs = teams[batting_first]["runs"]
+    t2_runs = teams[batting_second]["runs"]
+    t2_wickets = teams[batting_second]["wickets"]
+
+    MAX_WICKETS = max(1, len(teams[batting_second]["players"]) - 1)
+
+    if t2_runs > t1_runs:
+        winner_key = batting_second
+        wickets_left = MAX_WICKETS - t2_wickets
+        margin = f"won by {wickets_left} wickets"
+        
+    elif t1_runs > t2_runs:
+        winner_key = batting_first
+        run_diff = t1_runs - t2_runs
+        margin = f"won by {run_diff} runs"
+        
     else:
         winner_key = "Tie"
-        margin = "Match Tied!"
-
+        margin = "Match Tied! What a thriller!"
+    
     if forced:
         winner_key = "No Result"
         margin = "Stopped by host."
