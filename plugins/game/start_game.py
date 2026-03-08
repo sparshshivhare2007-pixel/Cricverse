@@ -19,7 +19,7 @@ async def start_game(client, message):
         [
             [
                 InlineKeyboardButton("🏏 Team", callback_data="mode_team"),
-                InlineKeyboardButton("👤 Solo", callback_data="mode_solo"), # Ye click hote hi solo.py active ho jayegi
+                InlineKeyboardButton("👤 Solo", callback_data="mode_solo"),
             ],
             [
                 InlineKeyboardButton("✖ Cancel", callback_data="mode_cancel")
