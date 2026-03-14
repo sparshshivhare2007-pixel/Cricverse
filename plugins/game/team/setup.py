@@ -501,10 +501,15 @@ async def set_batting(client, message):
         )
 
     idx = int(args[1]) - 1
+    
+    match = ACTIVE_MATCHES.get(chat_id)
+    if match and match.get("mode") == "Solo":
+        return
+    
     game = await get_active_game(chat_id)
     if not game:
         return await message.reply_text(
-            "😴 <b>No match right now.</b><br> /Start one first and we’ll cook 🔥",
+            "😴 <b>No match right now.</b>\n/Start one first and we’ll cook 🔥",
             parse_mode=ParseMode.HTML
         )
 
@@ -518,40 +523,38 @@ async def set_batting(client, message):
 
     game_id = game["game_id"]
     batting_team = game["batting_team"]
-    match = ACTIVE_MATCHES.get(chat_id)
+
+    team_players = match.get("teams", {}).get(batting_team, {}).get("players", [])
+    
+    if idx < 0 or idx >= len(team_players):
+        return await message.reply_text(f"❌ <b>Invalid player number.</b> Choose between 1 and {len(team_players)}.")
+        
+    selected_id = team_players[idx]
 
     async with db.pool.acquire() as conn:
-        players = await conn.fetch(
-            "SELECT user_id, is_out, is_captain FROM game_players "
-            "WHERE game_id=$1 AND team=$2 ORDER BY joined_at",
+        players_db = await conn.fetch(
+            "SELECT user_id, is_captain FROM game_players WHERE game_id=$1 AND team=$2",
             game_id, batting_team
         )
 
-        is_cap = any(p['user_id'] == user.id and p['is_captain'] for p in players)
-        if user.id != game["host_id"] and not is_cap:
+        is_cap = any(p['user_id'] == user.id and p['is_captain'] for p in players_db)
+        if user.id != game.get("host_id") and not is_cap:
             return await message.reply_text(
-                "🚫 <b>Captain’s and Host call only.</b><br> Spectators, enjoy the drama 😌",
+                "🚫 <b>Captain’s and Host call only.</b>\nSpectators, enjoy the drama 😌",
                 parse_mode=ParseMode.HTML
             )
 
-        if idx < 0 or idx >= len(players):
-            return await message.reply_text("❌ <b>Invalid player number.</b>")
+    if match and match.get("players", {}).get(selected_id, {}).get("is_out"):
+        return await message.reply_text(
+            "💀 <b>That batter is history.</b>\nOnce out, always out 😬"
+        )
 
-        selected_id = players[idx]["user_id"]
+    if match and selected_id in (match.get("striker"), match.get("non_striker")):
+        return await message.reply_text(
+            "⚠️ <b>Already batting!</b>\nNo cloning allowed 🧬"
+        )
 
-        if players[idx]["is_out"] or (
-            match and match.get("players", {}).get(selected_id, {}).get("is_out")
-        ):
-            return await message.reply_text(
-                "💀 <b>That batter is history.</b><br> Once out, always out 😬"
-            )
-
-        if match and selected_id in (match.get("striker"), match.get("non_striker")):
-            return await message.reply_text(
-                "⚠️ <b>Already batting!</b><br>No cloning allowed 🧬"
-            )
-
-        role = "striker" if match.get("striker") is None else "non_striker"
+    role = "striker" if match.get("striker") is None else "non_striker"
 
     async def background_db_update():
         async with db.pool.acquire() as bg_conn:
