@@ -661,6 +661,11 @@ async def set_bowler(client, message):
         )
 
     idx = int(args[1]) - 1
+    
+    match = ACTIVE_MATCHES.get(chat_id)
+    if match and match.get("mode") == "Solo":
+        return
+
     game = await get_active_game(chat_id)
     if not game:
         return await message.reply_text("😕 <b>No match found.</b><br> /Start a game and unleash the bowlers 🎯", parse_mode=ParseMode.HTML)
@@ -668,10 +673,9 @@ async def set_bowler(client, message):
     game_id = game["game_id"]
     bowling_team = game["bowling_team"]
     batting_team = game["batting_team"] 
-    match = ACTIVE_MATCHES.get(chat_id)
 
     try:
-        batters, bowling_players, team_a_rows, team_b_rows = await asyncio.gather(
+        batters, bowling_players_db, team_a_rows, team_b_rows = await asyncio.gather(
             safe_fetch(
                 "SELECT user_id, role FROM game_players "
                 "WHERE game_id=$1 AND team=$2 AND role IN ('striker','non_striker')",
@@ -707,14 +711,19 @@ async def set_bowler(client, message):
             parse_mode=ParseMode.HTML
         )
 
-    is_cap_or_host = (user.id == game["host_id"]) or any(p["user_id"] == user.id and p["is_captain"] for p in bowling_players)
+    is_cap_or_host = (user.id == game["host_id"]) or any(p["user_id"] == user.id and p["is_captain"] for p in bowling_players_db)
     if not is_cap_or_host:
         return await message.reply_text("🚫 <b>Captain or Host only.</b><br>Everyone else — grab popcorn 🍿", parse_mode=ParseMode.HTML)
 
-    if idx < 0 or idx >= len(bowling_players):
-        return await message.reply_text("❌ <b>Wrong number.</b><br> Count again… slowly 😅", parse_mode=ParseMode.HTML)
-
-    bowler_id = bowling_players[idx]["user_id"]
+    if match and match.get("teams") and bowling_team in match["teams"]:
+        team_players = match["teams"][bowling_team].get("players", [])
+        if idx < 0 or idx >= len(team_players):
+            return await message.reply_text(f"❌ <b>Wrong number.</b> Choose between 1 and {len(team_players)}.", parse_mode=ParseMode.HTML)
+        bowler_id = team_players[idx]
+    else:
+        if idx < 0 or idx >= len(bowling_players_db):
+            return await message.reply_text(f"❌ <b>Wrong number.</b> Choose between 1 and {len(bowling_players_db)}.", parse_mode=ParseMode.HTML)
+        bowler_id = bowling_players_db[idx]["user_id"]
 
     if match:
         if match.get("current_bowler"):
@@ -733,10 +742,7 @@ async def set_bowler(client, message):
     if match:
         if client:
             match["client"] = client
-            print(f"🟢 client stored in match for chat {chat_id}")
-        else:
-            print(f"❌ ERROR: client is None in /bowling for chat {chat_id}")
-
+        
         match.update({
             "current_bowler": bowler_id,
             "phase": "LIVE"
@@ -767,3 +773,4 @@ async def set_bowler(client, message):
 
         from plugins.game.team.state import start_first_ball
         asyncio.create_task(start_first_ball(client, new_match))
+        
