@@ -123,6 +123,8 @@ def calculate_title(stats):
 
     return "—"
 
+LOADING_STICKER = "CAACAgUAAxkBAALPAmm6Mnqzn153LcLGy-QexrqQakTqAAK1CQAC6b85V0ohe3zS5QecHgQ"
+
 @Client.on_message(filters.command(["userinfo", "profile", "userstats"]))
 async def userinfo(client, message):
     current_time = time.time()
@@ -157,6 +159,13 @@ async def userinfo(client, message):
     if not stats:
         return await message.reply_text("❌ <b>No stats found</b>\nPlay some matches first!", parse_mode=ParseMode.HTML)
 
+    # Send loading sticker while card generates
+    sticker_msg = None
+    try:
+        sticker_msg = await message.reply_sticker(LOADING_STICKER)
+    except Exception:
+        pass
+
     runs = stats.get("runs", 0)
     balls_faced = stats.get("balls_faced", 0)
     matches = stats.get("matches", 0)
@@ -180,11 +189,11 @@ async def userinfo(client, message):
     mister = calculate_title(stats)
     performance_score, tier = calculate_rank(stats)
 
-    text = (
+    caption = (
         f"🏏 <b>𝗖𝗔𝗥𝗘𝗘𝗥 𝗣𝗥𝗢𝗙𝗜𝗟𝗘</b>\n"
         f"👤 <b>Player:</b> ⏤͟͞{target_user.first_name}\n"
         f"🎖️ <b>Tier:</b> {tier}\n"
-        f"🧬 <b>Mister:</b> {mister}\n"
+        f"🧬 <b>Title:</b> {mister}\n"
         f"🆔 <b>ID:</b> <code>{uid}</code>\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n\n"
         "📊 <b>𝗢𝗩𝗘𝗥𝗔𝗟𝗟 𝗦𝗧𝗔𝗧𝗦</b>\n"
@@ -207,10 +216,31 @@ async def userinfo(client, message):
         f"📈 Win Rate: {win_rate:.1f}%\n"
         f"✅ Wins: {won} | ❌ Losses: {lost}\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n"
-        f"#CricQuest | {date.today()}"
+        f"#CricketLegacy | {date.today()}"
     )
 
-    await message.reply_photo(photo=PROFILE_IMG, caption=text, parse_mode=ParseMode.HTML)
+    # Generate dynamic profile card image
+    try:
+        from plugins.utilities.profile_card import generate_card, download_user_photo
+        photo_bytes = await download_user_photo(client, uid)
+        card_buf = generate_card(photo_bytes, target_user, dict(stats))
+        card_buf.name = "profile_card.png"
+
+        if sticker_msg:
+            try:
+                await sticker_msg.delete()
+            except Exception:
+                pass
+
+        await message.reply_photo(photo=card_buf, caption=caption, parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        if sticker_msg:
+            try:
+                await sticker_msg.delete()
+            except Exception:
+                pass
+        await message.reply_photo(photo=PROFILE_IMG, caption=caption, parse_mode=ParseMode.HTML)
 
 CATEGORIES = {
     "runs": ("🏏 Most Runs", "runs"),
