@@ -297,6 +297,7 @@ async def join_team_logic(client, message):
     asyncio.create_task(process_db_join())
     
 async def _solo_members(client, message, match):
+    username_cache = match.get("username_cache", {})
     user_cache = match.get("user_cache", {})
     players = match.get("players", [])
     current_batter = match.get("current_batter")
@@ -306,16 +307,14 @@ async def _solo_members(client, message, match):
     status = "📝 Joining" if phase == "SOLO_JOIN" else ("🏏 In Progress" if phase == "LIVE" else "✅ Finished")
 
     player_lines = []
-    for uid in players:
-        name = user_cache.get(uid, "Player")
+    for i, uid in enumerate(players, 1):
+        uname = username_cache.get(uid) or user_cache.get(uid, "Player")
         tag = ""
         if uid == current_batter:
-            tag = " 🏏 batting"
+            tag = " 🏏"
         elif uid == current_bowler:
-            tag = " ⚾ bowling"
-        label = f"@{name}" if "@" not in name else name
-        label += tag
-        player_lines.append(label)
+            tag = " ⚾"
+        player_lines.append(f"{i}. @{uname} [ <code>{uid}</code> ]{tag}")
 
     if not player_lines:
         player_lines = ["No players yet"]
@@ -324,6 +323,7 @@ async def _solo_members(client, message, match):
         "👤 <b>Solo Players</b>\n\n"
         + "\n".join(player_lines)
         + f"\n\n📍 <b>Status:</b> {status}"
+        + f"\n👥 <b>Count:</b> {len(players)}"
     )
 
     refresh_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data="refresh_members")]])

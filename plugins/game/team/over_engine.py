@@ -203,11 +203,53 @@ async def announce_achievement_group(client, chat_id, achievement, match):
     else:
         return
 
-    await client.send_message(
-        chat_id,
-        f"🏆 <b>Achievement Unlocked!</b>\n<i>{text}</i>",
-        parse_mode=ParseMode.HTML
-    )
+    caption = f"🏆 <b>Achievement Unlocked!</b>\n<i>{text}</i>"
+    await _send_achievement_media(client, chat_id, t, caption)
+
+
+async def _send_achievement_media(client, chat_id, achieve_type, caption):
+    from Assets.files import ACHIEVE_VIDEOS, ACHIEVE_IMG
+
+    key = None
+    if achieve_type == "BAT_50":
+        key = 50
+    elif achieve_type == "BAT_100":
+        key = 100
+    elif achieve_type == "BAT_150":
+        key = 150
+    elif achieve_type == "BAT_250":
+        key = 250
+    elif achieve_type == "BOWL_3":
+        key = 3
+    elif achieve_type == "BOWL_5":
+        key = 5
+    elif achieve_type == "HAT_TRICK":
+        key = "HAT_TRICK"
+
+    if key is not None:
+        videos = ACHIEVE_VIDEOS.get(key, [])
+        if videos:
+            file_id = random.choice(videos)
+            try:
+                await client.send_video(chat_id=chat_id, video=file_id,
+                                        caption=caption, parse_mode=ParseMode.HTML)
+                return
+            except Exception:
+                pass
+            try:
+                await client.send_animation(chat_id=chat_id, animation=file_id,
+                                            caption=caption, parse_mode=ParseMode.HTML)
+                return
+            except Exception:
+                pass
+    try:
+        await client.send_photo(chat_id=chat_id, photo=ACHIEVE_IMG,
+                                caption=caption, parse_mode=ParseMode.HTML)
+        return
+    except Exception:
+        pass
+    await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML)
+
 
 async def announce_achievement_dm(client, user_id, achievement):
     try:

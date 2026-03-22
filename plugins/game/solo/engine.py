@@ -1,9 +1,51 @@
 import asyncio
+import random
 import html
+import io
 from pyrogram.enums import ParseMode
 
 from plugins.game.team import ACTIVE_MATCHES
 from plugins.game.solo import get_next_solo_bowler, build_solo_score_text
+
+BATTER_LINES = {
+    50: [
+        "{p} raises the bat 🏏 Half-century loaded!",
+        "Fifty up! {p} is cooking now 🔥",
+        "{p} casually reaches 50 like it's a warm-up session.",
+        "Scoreboard ticking. 50 for {p}!",
+        "{p} hits 50 and the bowlers are questioning life choices 😂",
+    ],
+    100: [
+        "CENTURY! 💯 {p} has rewritten the script.",
+        "{p} goes full beast mode 💥 Hundred on the board.",
+        "Standing ovation 👏 {p} brings up a ton.",
+        "100 for {p}! Bowlers checking if this is a nightmare.",
+        "Bowling unit officially deleted. {p} hits 100.",
+    ],
+    150: [
+        "150! This is domination by {p}.",
+        "{p} refuses to stop. 150 and counting 👑",
+        "At this point {p} should just keep the bat forever.",
+    ],
+    250: [
+        "HISTORY ALERT 🚨 {p} smashes 250!",
+        "Unreal innings… {p} hits 250 😵‍💫",
+        "Statistical insanity. {p} posts 250.",
+    ],
+}
+
+BOWLER_LINES = {
+    3: [
+        "{p} strikes thrice 🎯 3-wicket haul!",
+        "Bowling clinic! {p} picks up 3.",
+        "{p} collecting wickets like Pokémon cards 😂",
+    ],
+    5: [
+        "FIVE-FOR! 🖐️ {p} demolishes the batting.",
+        "Bowling royalty 👑 5 wickets for {p}.",
+        "Complete destruction. 5 wickets for {p}.",
+    ],
+}
 
 
 def _mention(match, uid):
@@ -11,14 +53,35 @@ def _mention(match, uid):
     return f"<a href='tg://user?id={uid}'>{html.escape(name)}</a>"
 
 
-async def solo_advance_ball(match, result):
-    """
-    Core ball resolution for solo mode.
-    result: int (runs) or "W" (wicket)
-    """
+async def _send_achievement(client, chat_id, key, caption):
+    from Assets.files import ACHIEVE_VIDEOS, ACHIEVE_IMG
+    videos = ACHIEVE_VIDEOS.get(key, [])
+    if videos:
+        file_id = random.choice(videos)
+        try:
+            await client.send_video(chat_id=chat_id, video=file_id,
+                                    caption=caption, parse_mode=ParseMode.HTML)
+            return
+        except Exception:
+            pass
+        try:
+            await client.send_animation(chat_id=chat_id, animation=file_id,
+                                        caption=caption, parse_mode=ParseMode.HTML)
+            return
+        except Exception:
+            pass
+    try:
+        await client.send_photo(chat_id=chat_id, photo=ACHIEVE_IMG,
+                                caption=caption, parse_mode=ParseMode.HTML)
+        return
+    except Exception:
+        pass
+    await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML)
+
+
+async def solo_advance_ball(match, result, credit_bowler=True):
     client = match.get("client")
     chat_id = match.get("chat_id")
-
     if not client or not chat_id:
         return
 
@@ -27,7 +90,12 @@ async def solo_advance_ball(match, result):
     stats = match.get("player_stats", {})
 
     batter_stats = stats.setdefault(batter_id, _blank_stats())
-    bowler_stats = stats.setdefault(bowler_id, _blank_stats())
+    bowler_stats = stats.setdefault(bowler_id, _blank_stats()) if bowler_id else {}
+
+    # Reset timeout fail counters for both roles after each ball
+    timeouts = match.get("timeouts", {})
+    timeouts.get("bowler", {})["fails"] = 0
+    timeouts.get("batter", {})["fails"] = 0
 
     try:
         if result == "W":
@@ -35,15 +103,15 @@ async def solo_advance_ball(match, result):
             batter_stats["is_out"] = True
             batter_stats["batting_balls"].append("W")
 
-            bowler_stats["wickets"] += 1
-            bowler_stats["balls_bowled"] += 1
-            bowler_stats["bowling_balls"].append("W")
+            if credit_bowler and bowler_id and bowler_stats:
+                bowler_stats["wickets"] += 1
+                bowler_stats["balls_bowled"] += 1
+                bowler_stats["bowling_balls"].append("W")
+                await _check_bowler_achievements(client, chat_id, match, bowler_id, bowler_stats)
 
             match["total_balls"] += 1
             match["total_wickets"] += 1
             match["balls_in_spell"] = match.get("balls_in_spell", 0) + 1
-
-            await _check_bowler_achievements(client, chat_id, match, bowler_id, bowler_stats)
 
             await _next_batter_or_end(match)
 
@@ -57,9 +125,10 @@ async def solo_advance_ball(match, result):
             elif runs == 6:
                 batter_stats["sixes_count"] += 1
 
-            bowler_stats["runs_conceded"] += runs
-            bowler_stats["balls_bowled"] += 1
-            bowler_stats["bowling_balls"].append(runs)
+            if bowler_id and bowler_stats:
+                bowler_stats["runs_conceded"] += runs
+                bowler_stats["balls_bowled"] += 1
+                bowler_stats["bowling_balls"].append(runs)
 
             match["total_runs"] += runs
             match["total_balls"] += 1
@@ -97,33 +166,25 @@ def _blank_stats():
 
 
 async def _rotate_bowler(client, match):
-    """Move to the next bowler after a 3-ball spell."""
     chat_id = match["chat_id"]
     match["balls_in_spell"] = 0
-
     next_bowler = get_next_solo_bowler(match)
     match["current_bowler"] = next_bowler
-
     if next_bowler:
         name = match.get("user_cache", {}).get(next_bowler, "Player")
-        await client.send_message(
-            chat_id,
-            f"🎯 Hey {name}, now you're bowling!",
-            parse_mode=ParseMode.HTML,
-        )
-        await asyncio.sleep(0.5)
+        await client.send_message(chat_id, f"🎯 Hey {name}, now you're bowling!", parse_mode=ParseMode.HTML)
+        await asyncio.sleep(0.4)
         await _next_ball(client, match)
     else:
         await _end_solo_match(match)
 
 
 async def _next_batter_or_end(match):
-    """Called when a wicket falls. Bring in next batter or end game."""
     client = match.get("client")
     chat_id = match.get("chat_id")
     players = match["players"]
-
     current_batter = match.get("current_batter")
+
     try:
         current_idx = players.index(current_batter)
     except ValueError:
@@ -151,13 +212,8 @@ async def _next_batter_or_end(match):
         )
 
     new_batter_name = match.get("user_cache", {}).get(next_batter, "Player")
-    await client.send_message(
-        chat_id,
-        f"🎉 Hey {new_batter_name}, now you're batter!",
-        parse_mode=ParseMode.HTML,
-    )
-
-    await asyncio.sleep(0.5)
+    await client.send_message(chat_id, f"🎉 Hey {new_batter_name}, now you're batting!", parse_mode=ParseMode.HTML)
+    await asyncio.sleep(0.4)
     await _next_ball(client, match)
 
 
@@ -170,24 +226,25 @@ async def _next_ball(client, match):
 async def _end_solo_match(match, forced=False):
     client = match.get("client")
     chat_id = match.get("chat_id")
-
     if not client or not chat_id:
         match["phase"] = "finished"
         return
 
     match["phase"] = "finished"
 
-    players = match.get("players", [])
-    stats = match.get("player_stats", {})
-    user_cache = match.get("user_cache", {})
-
     if not forced:
-        scorecard = _build_final_scorecard(match)
-        await client.send_message(
-            chat_id,
-            scorecard,
-            parse_mode=ParseMode.HTML,
-        )
+        try:
+            from plugins.game.solo.scorecard import build_solo_end_card
+            card_buf = build_solo_end_card(match)
+            caption = _build_final_scorecard_text(match)
+            await client.send_photo(chat_id=chat_id, photo=card_buf,
+                                    caption=caption, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            print(f"Solo end card error: {e}")
+            try:
+                await client.send_message(chat_id, _build_final_scorecard_text(match), parse_mode=ParseMode.HTML)
+            except Exception:
+                pass
 
     try:
         from database.games import end_game as close_db_game
@@ -195,14 +252,23 @@ async def _end_solo_match(match, forced=False):
     except Exception as e:
         print(f"Solo end DB error: {e}")
 
+    asyncio.create_task(_save_solo_stats(match))
+    ACTIVE_MATCHES.pop(chat_id, None)
+    print(f"✅ Solo match in {chat_id} ended.")
+
+
+async def _save_solo_stats(match):
+    stats = match.get("player_stats", {})
     try:
         from database.connection import db
+        pool = await db.ensure_pool() or db.pool
+        if not db.pool:
+            return
         async with db.pool.acquire() as conn:
             for uid, p in stats.items():
-                is_win = 0
-                is_out = 1 if p.get("is_out") else 0
                 runs = p.get("runs", 0)
                 wickets = p.get("wickets", 0)
+                is_out = 1 if p.get("is_out") else 0
                 fours = p.get("fours_count", 0)
                 sixes = p.get("sixes_count", 0)
                 b_faced = p.get("balls_faced", 0)
@@ -219,42 +285,43 @@ async def _end_solo_match(match, forced=False):
                         balls_faced, balls_bowled, runs_conceded, fours, sixes,
                         moms, centuries, fifties, ducks
                     )
-                    VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $12, $13)
+                    VALUES ($1, 1, 0, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $11, $12)
                     ON CONFLICT (user_id) DO UPDATE SET
                         matches = user_stats.matches + 1,
-                        runs = user_stats.runs + $4,
-                        wickets = user_stats.wickets + $5,
-                        balls_faced = user_stats.balls_faced + $6,
-                        balls_bowled = user_stats.balls_bowled + $7,
-                        runs_conceded = user_stats.runs_conceded + $8,
-                        fours = user_stats.fours + $9,
-                        sixes = user_stats.sixes + $10,
-                        centuries = user_stats.centuries + $11,
-                        fifties = user_stats.fifties + $12,
-                        ducks = user_stats.ducks + $13
+                        runs = user_stats.runs + $3,
+                        wickets = user_stats.wickets + $4,
+                        balls_faced = user_stats.balls_faced + $5,
+                        balls_bowled = user_stats.balls_bowled + $6,
+                        runs_conceded = user_stats.runs_conceded + $7,
+                        fours = user_stats.fours + $8,
+                        sixes = user_stats.sixes + $9,
+                        centuries = user_stats.centuries + $10,
+                        fifties = user_stats.fifties + $11,
+                        ducks = user_stats.ducks + $12
                     """,
-                    uid, is_win, is_out, runs, wickets, b_faced, b_bowled,
+                    uid, is_out, runs, wickets, b_faced, b_bowled,
                     r_conceded, fours, sixes, is_100, is_50, is_duck,
                 )
     except Exception as e:
         print(f"Solo stats save error: {e}")
 
-    ACTIVE_MATCHES.pop(chat_id, None)
-    print(f"✅ Solo match in {chat_id} ended.")
 
-
-def _build_final_scorecard(match):
+def _build_final_scorecard_text(match):
     players = match.get("players", [])
     stats = match.get("player_stats", {})
     user_cache = match.get("user_cache", {})
 
-    lines = ["─────⊱ Sᴏʟᴏ Pʟᴀʏᴇʀ ⊰────\n"]
+    top_scorer_id, top_runs = None, -1
+    top_wickets_id, top_wickets = None, -1
 
-    top_scorer_id = None
-    top_runs = -1
-    top_wickets_id = None
-    top_wickets = -1
+    for uid in players:
+        p = stats.get(uid, {})
+        if p.get("runs", 0) > top_runs:
+            top_runs = p["runs"]; top_scorer_id = uid
+        if p.get("wickets", 0) > top_wickets:
+            top_wickets = p["wickets"]; top_wickets_id = uid
 
+    lines = ["🏆 <b>SOLO MATCH OVER!</b>\n📊 <b>Final Scorecard</b>\n"]
     for uid in players:
         p = stats.get(uid, {})
         name = user_cache.get(uid, "Player")
@@ -262,82 +329,55 @@ def _build_final_scorecard(match):
         balls = p.get("balls_faced", 0)
         fours = p.get("fours_count", 0)
         sixes = p.get("sixes_count", 0)
-        batting_balls = p.get("batting_balls", [])
         is_out = p.get("is_out", False)
-
-        if runs > top_runs:
-            top_runs = runs
-            top_scorer_id = uid
-
-        if p.get("wickets", 0) > top_wickets:
-            top_wickets = p.get("wickets", 0)
-            top_wickets_id = uid
-
-        if is_out:
-            emoji = "⚪️"
-        else:
-            emoji = "🟠"
-
-        balls_display = ", ".join(str(b) for b in batting_balls) if batting_balls else "-"
+        b_bowled = p.get("balls_bowled", 0)
+        wkts = p.get("wickets", 0)
+        r_conceded = p.get("runs_conceded", 0)
+        status = "❌" if is_out else "✅"
         lines.append(
-            f"{emoji} {name} = {runs}({balls})\n"
-            f"╰⊚ 4️⃣s: {fours:02d}, 6️⃣s: {sixes:02d} - ID: {uid}\n"
-            f"╰⊚ ({balls_display})"
+            f"<b>{name}</b> — {runs} ({balls}) {status}\n"
+            f"🏏 4️⃣: {fours} | 6️⃣: {sixes}\n"
+            f"🎯 Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs"
         )
 
-    lines.append("\n────┈┄┄╌╌╌╌┄┄┈────")
-
+    lines.append("────┈┄┄╌╌╌╌┄┄┈────")
     if top_scorer_id:
         ts_name = user_cache.get(top_scorer_id, "Player")
-        ts_runs = stats.get(top_scorer_id, {}).get("runs", 0)
-        ts_balls = stats.get(top_scorer_id, {}).get("balls_faced", 0)
-        lines.append(f"🏆 <b>Top Scorer:</b> {ts_name} — {ts_runs}({ts_balls})")
-
+        lines.append(f"🏏 <b>Top Scorer:</b> {ts_name} — {top_runs}({stats.get(top_scorer_id, {}).get('balls_faced', 0)})")
     if top_wickets_id and top_wickets > 0:
         tw_name = user_cache.get(top_wickets_id, "Player")
-        lines.append(f"🎯 <b>Best Bowler:</b> {tw_name} — {top_wickets} wicket(s)")
+        lines.append(f"🎯 <b>Best Bowler:</b> {tw_name} — {top_wickets} wkt(s)")
 
     total_runs = match.get("total_runs", 0)
     total_balls = match.get("total_balls", 0)
     overs = f"{total_balls // 6}.{total_balls % 6}"
-    lines.append(f"📊 <b>Total:</b> {total_runs} runs in {overs} overs")
-    lines.append("────┈┄┄╌╌╌╌┄┄┈────")
-    lines.append("✨ Thanks for playing! | @NexoraSystems")
+    lines.append(f"📈 <b>Total:</b> {total_runs} runs | {overs} overs")
+    lines.append("✨ GG! | Nexora Cricket")
 
-    return "\n".join(lines)
+    return "\n\n".join(lines)
 
 
 async def _check_batter_achievements(client, chat_id, match, batter_id, p):
-    announced = match.get("announced_achievements", {}).get("batting", {})
+    announced = match.setdefault("announced_achievements", {}).setdefault("batting", {})
     batter_announced = announced.setdefault(batter_id, set())
     runs = p.get("runs", 0)
-    for milestone, line in [(50, "{p} brings up a classy 50 🏏"), (100, "CENTURY 💯 {p} is on fire!"), (150, "150 up 😬 Domination by {p}"), (250, "🚨 HISTORY 🚨 {p} smashes 250!")]:
+    name = _mention(match, batter_id)
+    for milestone, lines in BATTER_LINES.items():
         if runs >= milestone and milestone not in batter_announced:
             batter_announced.add(milestone)
-            name = f"<a href='tg://user?id={batter_id}'>{html.escape(match.get('user_cache', {}).get(batter_id, 'Player'))}</a>"
-            try:
-                await client.send_message(
-                    chat_id,
-                    f"🏆 <b>Achievement!</b>\n<i>{line.format(p=name)}</i>",
-                    parse_mode=ParseMode.HTML,
-                )
-            except Exception:
-                pass
+            text = random.choice(lines).format(p=name)
+            caption = f"🏆 <b>Achievement!</b>\n<i>{text}</i>"
+            asyncio.create_task(_send_achievement(client, chat_id, milestone, caption))
 
 
 async def _check_bowler_achievements(client, chat_id, match, bowler_id, p):
-    announced = match.get("announced_achievements", {}).get("bowling", {})
+    announced = match.setdefault("announced_achievements", {}).setdefault("bowling", {})
     bowl_announced = announced.setdefault(bowler_id, set())
     wkts = p.get("wickets", 0)
-    msgs = {3: "{p} picks up a 3-fer 🎯", 5: "FIVE-FOR 🖐️ {p} destroys the batting!"}
-    if wkts in msgs and wkts not in bowl_announced:
-        bowl_announced.add(wkts)
-        name = f"<a href='tg://user?id={bowler_id}'>{html.escape(match.get('user_cache', {}).get(bowler_id, 'Player'))}</a>"
-        try:
-            await client.send_message(
-                chat_id,
-                f"🏆 <b>Achievement!</b>\n<i>{msgs[wkts].format(p=name)}</i>",
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception:
-            pass
+    name = _mention(match, bowler_id)
+    for milestone, lines in BOWLER_LINES.items():
+        if wkts >= milestone and milestone not in bowl_announced:
+            bowl_announced.add(milestone)
+            text = random.choice(lines).format(p=name)
+            caption = f"🎯 <b>Achievement!</b>\n<i>{text}</i>"
+            asyncio.create_task(_send_achievement(client, chat_id, milestone, caption))

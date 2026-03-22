@@ -5,7 +5,6 @@ from pyrogram.enums import ParseMode
 async def start_solo_timer(match, role):
     client = match.get("client")
     chat_id = match.get("chat_id")
-
     if not client or not chat_id:
         return
 
@@ -19,7 +18,7 @@ async def start_solo_timer(match, role):
     try:
         await client.send_message(
             chat_id,
-            f"⏳ <b>30 seconds gone.</b>\n{mention} still thinking...\nThis is cricket 😭",
+            f"⏳ <b>30 seconds gone.</b>\n{mention} still thinking… This is cricket 😭",
             parse_mode=ParseMode.HTML,
         )
     except Exception:
@@ -31,7 +30,7 @@ async def start_solo_timer(match, role):
     try:
         await client.send_message(
             chat_id,
-            f"⚠️ <b>10 seconds remaining.</b>\n{mention}, play now!",
+            f"⚠️ <b>10 seconds left!</b>\n{mention}, play NOW or face consequences!",
             parse_mode=ParseMode.HTML,
         )
     except Exception:
@@ -53,7 +52,6 @@ def _already_played(match, role):
 async def _handle_solo_timeout(match, role):
     client = match.get("client")
     chat_id = match.get("chat_id")
-
     if not client or not chat_id or match.get("phase") != "LIVE":
         return
 
@@ -62,29 +60,52 @@ async def _handle_solo_timeout(match, role):
 
     t_info = match["timeouts"][role]
     user_id = match.get("current_bowler") if role == "bowler" else match.get("current_batter")
-
     if not user_id:
         return
 
     name = match.get("user_cache", {}).get(user_id, role.capitalize())
     mention = f"<a href='tg://user?id={user_id}'>{name}</a>"
+    fails = t_info.get("fails", 0)
 
-    if t_info.get("fails", 0) == 0:
+    # First warning — chance 1 left
+    if fails == 0:
         t_info["fails"] = 1
         match["prompt_dispatched"] = False
-        await client.send_message(
-            chat_id,
-            (
-                "🚩 <b>TIME WARNING</b>\n"
-                f"{mention} freezing under pressure.\n"
-                "⚠️ <b>Next delay:</b> -6 runs penalty & action taken."
-            ),
-            parse_mode=ParseMode.HTML,
-        )
-        from plugins.game.solo.timeouts import start_solo_timer
+        try:
+            await client.send_message(
+                chat_id,
+                (
+                    "🚩 <b>TIME WARNING #1</b>\n"
+                    f"{mention} is freezing under pressure.\n"
+                    "⚠️ <b>1 more chance</b> before penalty kicks in!"
+                ),
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception:
+            pass
         t_info["task"] = asyncio.create_task(start_solo_timer(match, role))
         return
 
+    # Second warning — last chance
+    if fails == 1:
+        t_info["fails"] = 2
+        match["prompt_dispatched"] = False
+        try:
+            await client.send_message(
+                chat_id,
+                (
+                    "🚨 <b>TIME WARNING #2 — FINAL WARNING</b>\n"
+                    f"{mention} is still not playing!\n"
+                    "💀 <b>Next timeout = -6 runs penalty & action taken.</b>"
+                ),
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception:
+            pass
+        t_info["task"] = asyncio.create_task(start_solo_timer(match, role))
+        return
+
+    # Third strike — apply penalty
     t_info["fails"] = 0
     match["total_runs"] = max(0, match.get("total_runs", 0) - 6)
 
@@ -95,20 +116,25 @@ async def _handle_solo_timeout(match, role):
     )
 
     if role == "batter":
-        penalty_msg += "☝️ <b>Batter is OUT</b> — defeated by the clock.\n"
-        await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
+        penalty_msg += "☝️ <b>Batter is OUT</b> — defeated by the clock. (No bowler credit)"
+        try:
+            await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
         from plugins.game.solo.engine import solo_advance_ball
-        await solo_advance_ball(match, "W")
+        # No bowler credit on timeout dismissal
+        await solo_advance_ball(match, "W", credit_bowler=False)
+
     else:
-        penalty_msg += (
-            "🎳 <b>Bowler skipped.</b> Next bowler steps in.\n"
-        )
+        penalty_msg += "🎳 <b>Bowler skipped.</b> Next bowler steps in."
         match.update({"bowled": False, "batted": False, "prompt_dispatched": False, "last_bowl": None})
         match["balls_in_spell"] = 0
-
         from plugins.game.solo import get_next_solo_bowler
         from plugins.game.solo.state import send_solo_ball_prompt
         next_b = get_next_solo_bowler(match)
         match["current_bowler"] = next_b
-        await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
+        try:
+            await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
         await send_solo_ball_prompt(client, match)
