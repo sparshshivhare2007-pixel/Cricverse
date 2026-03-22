@@ -382,11 +382,10 @@ async def save_match_stats(match, winner_team):
                     runs, uid
                 )
 
-            partnership_runs = match.get("partnership", 0)
-            striker = match.get("striker")
-            non_striker = match.get("non_striker")
+            partnership_runs = match.get("best_partnership_this_match", match.get("partnership", 0))
+            all_uids = list(players.keys())
 
-            for pid in [striker, non_striker]:
+            for pid in all_uids:
                 if pid:
                     await conn.execute(
                         "UPDATE user_stats SET best_partnership = GREATEST(best_partnership, $1) WHERE user_id = $2",

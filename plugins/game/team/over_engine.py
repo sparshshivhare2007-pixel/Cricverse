@@ -374,6 +374,8 @@ async def advance_ball(match, result):
 
             match["partnership"] += runs
             match["partnership_balls"] += 1
+            if match["partnership"] > match.get("best_partnership_this_match", 0):
+                match["best_partnership_this_match"] = match["partnership"]
             
             if has_client:
                 s = match.get("striker")

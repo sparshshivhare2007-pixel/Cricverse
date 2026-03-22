@@ -214,7 +214,9 @@ async def userinfo(client, message):
         f"🎩 Hat-Tricks: {stats.get('hat_tricks', 0)}\n\n"
         "🧢 <b>𝗟𝗘𝗔𝗗𝗘𝗥𝗦𝗛𝗜𝗣</b>\n"
         f"📈 Win Rate: {win_rate:.1f}%\n"
-        f"✅ Wins: {won} | ❌ Losses: {lost}\n"
+        f"✅ Wins: {won} | ❌ Losses: {lost}\n\n"
+        "🤝 <b>𝗣𝗔𝗥𝗧𝗡𝗘𝗥𝗦𝗛𝗜𝗣</b>\n"
+        f"🏏 Best Partnership: {stats.get('best_partnership', 0)} runs\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n"
         f"#CricketLegacy | {date.today()}"
     )
@@ -249,7 +251,8 @@ CATEGORIES = {
     "fifties": ("⭐ Most Fifties", "fifties"),
     "centuries": ("🔥 Most Centuries", "centuries"),
     "moms": ("🏅 Most MOMs", "moms"),
-    "best_captain": ("🧑‍✈️ Best Captain", "wins")
+    "best_captain": ("🧑‍✈️ Best Captain", "wins"),
+    "best_partnership": ("🤝 Best Partnership", "best_partnership"),
 }
 
 async def get_home_text(user):

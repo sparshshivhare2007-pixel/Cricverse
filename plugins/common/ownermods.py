@@ -424,6 +424,178 @@ async def broad_callback(client, cb):
         parse_mode=ParseMode.HTML
     )
     
+@Client.on_message(filters.command("dbtrans"))
+async def dbtrans_cmd(client, message):
+    import json
+    import asyncio
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    if not message.reply_to_message or not message.reply_to_message.document:
+        return await message.reply_text(
+            "📂 Reply to a JSON file containing user stats to import.\n\n"
+            "<b>Format:</b> Each line is a JSON object, or a single JSON array <code>[{...}, {...}]</code>",
+            parse_mode=ParseMode.HTML
+        )
+
+    status = await message.reply_text("📥 <b>Downloading file…</b>", parse_mode=ParseMode.HTML)
+
+    try:
+        file_bytes = await client.download_media(message.reply_to_message, in_memory=True)
+        raw = bytes(file_bytes.getbuffer()).decode("utf-8", errors="ignore")
+    except Exception as e:
+        return await status.edit_text(f"❌ Failed to download file: {e}")
+
+    records = []
+    try:
+        stripped = raw.strip()
+        if stripped.startswith("["):
+            records = json.loads(stripped)
+        else:
+            for line in stripped.splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        records.append(json.loads(line))
+                    except Exception:
+                        pass
+    except Exception as e:
+        return await status.edit_text(f"❌ Failed to parse JSON: {e}")
+
+    if not records:
+        return await status.edit_text("❌ No valid records found in file.")
+
+    total = len(records)
+    added = 0
+    skipped = 0
+    errors = []
+
+    ANIM_FRAMES = ["⏳", "⌛", "🔄", "📊"]
+
+    async def update_progress(frame_idx):
+        frame = ANIM_FRAMES[frame_idx % len(ANIM_FRAMES)]
+        bar_done = int((added + skipped) / total * 20) if total > 0 else 0
+        bar = "█" * bar_done + "░" * (20 - bar_done)
+        pct = int((added + skipped) / total * 100) if total > 0 else 0
+        text = (
+            f"{frame} <b>Importing Stats…</b>\n\n"
+            f"<code>[{bar}] {pct}%</code>\n\n"
+            f"✅ Added: <b>{added}</b>\n"
+            f"⏭️ Skipped: <b>{skipped}</b>\n"
+            f"📦 Total: <b>{total}</b>"
+        )
+        try:
+            await status.edit_text(text, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
+
+    async with db.pool.acquire() as conn:
+        for idx, record in enumerate(records):
+            try:
+                ts = record.get("total_stats", {})
+                uid = int(record.get("user_id", 0))
+                if not uid:
+                    skipped += 1
+                    continue
+
+                username = record.get("username") or None
+                first_name = record.get("first_name") or None
+
+                runs = int(ts.get("runs", 0))
+                wickets = int(ts.get("wickets", 0))
+                matches = int(ts.get("matches_played", 0))
+                balls_faced = int(ts.get("balls_faced", 0))
+                balls_bowled = int(ts.get("balls_bowled", 0))
+                runs_conceded = int(ts.get("runs_conceded", 0))
+                sixes = int(ts.get("sixes", 0))
+                fours = int(ts.get("fours", 0))
+                centuries = int(ts.get("centuries", 0))
+                fifties = int(ts.get("fifties", 0))
+                ducks = int(ts.get("ducks", 0))
+                hat_tricks = int(ts.get("hat_tricks", 0))
+
+                mom_data = ts.get("man_of_match", {})
+                moms = int(mom_data.get("total", 0)) if isinstance(mom_data, dict) else 0
+
+                hs_data = ts.get("highest_score", {})
+                highest_score = int(hs_data.get("runs", 0)) if isinstance(hs_data, dict) else int(hs_data or 0)
+
+                bp_data = ts.get("best_partnership", {})
+                if isinstance(bp_data, dict):
+                    best_partnership = int(bp_data.get("runs", 0))
+                else:
+                    best_partnership = int(bp_data or 0)
+
+                cap_data = ts.get("best_captain", {})
+                wins = int(cap_data.get("wins", 0)) if isinstance(cap_data, dict) else 0
+                losses = int(cap_data.get("losses", 0)) if isinstance(cap_data, dict) else 0
+
+                await conn.execute("""
+                    INSERT INTO user_stats (
+                        user_id, username, first_name,
+                        matches, wins, losses, runs, wickets,
+                        balls_faced, balls_bowled, runs_conceded,
+                        sixes, fours, centuries, fifties, ducks,
+                        hat_tricks, moms, highest_score, best_partnership
+                    )
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        username      = COALESCE(EXCLUDED.username, user_stats.username),
+                        first_name    = COALESCE(EXCLUDED.first_name, user_stats.first_name),
+                        matches       = user_stats.matches + $4,
+                        wins          = user_stats.wins + $5,
+                        losses        = user_stats.losses + $6,
+                        runs          = user_stats.runs + $7,
+                        wickets       = user_stats.wickets + $8,
+                        balls_faced   = user_stats.balls_faced + $9,
+                        balls_bowled  = user_stats.balls_bowled + $10,
+                        runs_conceded = user_stats.runs_conceded + $11,
+                        sixes         = user_stats.sixes + $12,
+                        fours         = user_stats.fours + $13,
+                        centuries     = user_stats.centuries + $14,
+                        fifties       = user_stats.fifties + $15,
+                        ducks         = user_stats.ducks + $16,
+                        hat_tricks    = user_stats.hat_tricks + $17,
+                        moms          = user_stats.moms + $18,
+                        highest_score = GREATEST(user_stats.highest_score, $19),
+                        best_partnership = GREATEST(user_stats.best_partnership, $20)
+                """,
+                    uid, username, first_name,
+                    matches, wins, losses, runs, wickets,
+                    balls_faced, balls_bowled, runs_conceded,
+                    sixes, fours, centuries, fifties, ducks,
+                    hat_tricks, moms, highest_score, best_partnership
+                )
+
+                await conn.execute(
+                    "INSERT INTO users (user_id, name) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING",
+                    uid, first_name or username or "Player"
+                )
+
+                added += 1
+
+            except Exception as e:
+                skipped += 1
+                errors.append(f"uid={record.get('user_id','?')}: {str(e)[:60]}")
+
+            if (idx + 1) % 3 == 0 or idx == total - 1:
+                await update_progress(idx)
+                await asyncio.sleep(0.1)
+
+    result_text = (
+        "✅ <b>Import Complete!</b>\n\n"
+        f"📦 Total Records: <b>{total}</b>\n"
+        f"✅ Successfully Added: <b>{added}</b>\n"
+        f"⏭️ Skipped / Errors: <b>{skipped}</b>\n"
+    )
+    if errors:
+        error_preview = "\n".join(errors[:5])
+        result_text += f"\n⚠️ <b>Error Preview:</b>\n<code>{error_preview}</code>"
+
+    await status.edit_text(result_text, parse_mode=ParseMode.HTML)
+
+
 @Client.on_message(filters.command("leave"))
 async def leave_cmd(client, message):
     if not message.from_user or message.from_user.id != OWNER_ID:
