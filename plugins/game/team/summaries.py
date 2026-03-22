@@ -81,10 +81,10 @@ async def build_over_summary(client, match):
 
     lines = [
         f"📋 <b>Over {completed_over} Summary</b>",
-        "━━━━━━━━━━━━━━━━",
+        "───┈┄┄╌╌╌╌┄┄┈────",
         team_line("A"),
         team_line("B"),
-        "━━━━━━━━━━━━━━━━",
+        "────┈┄┄╌╌╌╌┄┄┈───",
     ]
 
     if player_lines:
@@ -92,10 +92,9 @@ async def build_over_summary(client, match):
         lines.extend(player_lines)
 
     lines += [
-        "━━━━━━━━━━━━━━━━",
+        "────┈┄┄╌╌╌╌┄┄┈────",
         f"🕒 Last Over: <code>[ {recent} ]</code>",
         f"🤝 Partnership: <b>{partnership_runs}</b> ({partnership_balls}b)",
-        f"⚾ Next Bowler: {next_bowler_name}",
         f"👉 On Strike: {next_batter}",
         f"🎙 Host: {safe_host}",
     ]
