@@ -26,3 +26,15 @@ pyrofork
 requests
 TgCrypto-pyrofork
 werkzeug
+aiocron
+asyncpg
+flask==3.0.0
+GitPython
+gunicorn==20.1.0
+httpx
+matplotlib
+pillow
+pyrofork
+requests
+TgCrypto-pyrofork
+werkzeug==3.0.1
