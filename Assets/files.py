@@ -44,25 +44,15 @@ RUN_VIDEOS = {
 }
 
 
-
 ACHIEVE_VIDEOS = {
-    # 🏏 Batting Milestones
-    "50": [
+    50: [
         "CgACAgQAAxkBAAOFab9XXXwbw6GUJKBYCXTDklZASwcAAvoDAAJAiIVQN4EegvsVk08eBA",
-        "FILE_ID_2"
     ],
-    "100": [
-        "FILE_ID_1"
-    ],
-    "150": [],
-    "250": [],
-
-    # 🎯 Bowling Milestones
-    "3": [
-        "FILE_ID_1"
-    ],
-    "5": [
-        "FILE_ID_1",
-        "FILE_ID_2"
-    ],
+    100: [],
+    150: [],
+    250: [],
+    3: [],
+    5: [],
+    "HAT_TRICK": [],
+    "Duck": [],
 }

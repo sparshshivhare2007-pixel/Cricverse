@@ -30,8 +30,14 @@ def advance_solo_bowler(match):
 
 def _calc_sr(runs, balls):
     if balls == 0:
-        return "0.0"
+        return "—"
     return f"{(runs / balls * 100):.1f}"
+
+
+def _calc_eco(runs_conceded, balls_bowled):
+    if balls_bowled == 0:
+        return "—"
+    return f"{(runs_conceded / balls_bowled * 6):.1f}"
 
 
 def build_solo_score_text(match):
@@ -52,11 +58,12 @@ def build_solo_score_text(match):
         wkts = p.get("wickets", 0)
         r_conceded = p.get("runs_conceded", 0)
         sr = _calc_sr(runs, balls)
+        eco = _calc_eco(r_conceded, b_bowled)
 
         lines.append(
             f"❖ <b>{name}</b> — {runs} ({balls})\n"
             f"➥ 4️⃣: {fours} | 6️⃣: {sixes} ⟶ SR : {sr}\n"
-            f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs"
+            f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs | Eco: {eco}"
         )
 
     total_runs = match.get("total_runs", 0)

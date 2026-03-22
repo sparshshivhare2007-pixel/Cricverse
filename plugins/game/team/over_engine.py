@@ -210,21 +210,13 @@ async def announce_achievement_group(client, chat_id, achievement, match):
 async def _send_achievement_media(client, chat_id, achieve_type, caption):
     from Assets.files import ACHIEVE_VIDEOS, ACHIEVE_IMG
 
-    key = None
-    if achieve_type == "BAT_50":
-        key = 50
-    elif achieve_type == "BAT_100":
-        key = 100
-    elif achieve_type == "BAT_150":
-        key = 150
-    elif achieve_type == "BAT_250":
-        key = 250
-    elif achieve_type == "BOWL_3":
-        key = 3
-    elif achieve_type == "BOWL_5":
-        key = 5
-    elif achieve_type == "HAT_TRICK":
-        key = "HAT_TRICK"
+    _type_map = {
+        "BAT_50": 50, "BAT_100": 100, "BAT_150": 150, "BAT_250": 250,
+        "BOWL_3": 3, "BOWL_5": 5,
+        "HAT_TRICK": "HAT_TRICK",
+        "DUCK": "Duck",
+    }
+    key = _type_map.get(achieve_type)
 
     if key is not None:
         videos = ACHIEVE_VIDEOS.get(key, [])
@@ -401,11 +393,12 @@ async def advance_ball(match, result):
                 
                 if has_client:
                     announced = match["announced_achievements"]["batting"].setdefault(actual_striker, set())
+                    _bat_lines = {50: "{p} brings up a classy 50 🏏", 100: "CENTURY 💯 {p} is on fire!", 150: "150 up 😬 Domination by {p}", 250: "🚨 HISTORY 🚨 {p} smashes 250!"}
                     for milestone in (50, 100, 150, 250):
                         if p["runs"] >= milestone and milestone not in announced:
                             announced.add(milestone)
-                            lines = {50: "{p} brings up a classy 50 🏏", 100: "CENTURY 💯 {p} is on fire!", 150: "150 up 😬 Domination by {p}", 250: "🚨 HISTORY 🚨 {p} smashes 250!"}
-                            await client.send_message(chat_id, f"🏆 <b>Achievement!</b>\n<i>{lines[milestone].format(p=_mention(actual_striker, match))}</i>", parse_mode=ParseMode.HTML)
+                            caption = f"🏆 <b>Achievement!</b>\n<i>{_bat_lines[milestone].format(p=_mention(actual_striker, match))}</i>"
+                            asyncio.create_task(_send_achievement_media(client, chat_id, f"BAT_{milestone}", caption))
 
                 if runs == 4: p["fours_count"] = p.get("fours_count", 0) + 1
                 elif runs == 6: p["sixes_count"] = p.get("sixes_count", 0) + 1
@@ -456,6 +449,14 @@ async def advance_ball(match, result):
                 p = match["players"][actual_striker]
                 p["balls_faced"] += 1
                 p["is_out"] = True
+                if has_client and p.get("runs", 0) == 0:
+                    duck_text = random.choice([
+                        "🦆 DUCK! {p} walks back without troubling the scorer.",
+                        "🦆 Zero! {p} couldn't even get off the mark!",
+                        "🦆 Golden duck for {p}. The bowling attack is celebrating 🎉",
+                        "🦆 Out for a DUCK! {p} needs to hit the nets hard.",
+                    ]).format(p=_mention(actual_striker, match))
+                    asyncio.create_task(_send_achievement_media(client, chat_id, "DUCK", f"🦆 <b>Duck!</b>\n<i>{duck_text}</i>"))
 
             try:
                 from database.connection import db
@@ -473,13 +474,14 @@ async def advance_ball(match, result):
                     announced = match["announced_achievements"]["bowling"].setdefault(bowler_id, set())
                     if b["wickets"] in (3, 5) and b["wickets"] not in announced:
                         announced.add(b["wickets"])
-                        msg = {3: "{p} picks up a 3-fer 🎯", 5: "FIVE-FOR 🖐️ {p} destroys the batting!"}
-                        await client.send_message(chat_id, f"🏆 <b>Achievement!</b>\n<i>{msg[b['wickets']].format(p=_mention(bowler_id, match))}</i>", parse_mode=ParseMode.HTML)
-                        
+                        _bowl_msgs = {3: "{p} picks up a 3-fer 🎯", 5: "FIVE-FOR 🖐️ {p} destroys the batting!"}
+                        caption = f"🏆 <b>Achievement!</b>\n<i>{_bowl_msgs[b['wickets']].format(p=_mention(bowler_id, match))}</i>"
+                        asyncio.create_task(_send_achievement_media(client, chat_id, f"BOWL_{b['wickets']}", caption))
+
                     balls = b.get("bowling_balls", [])
                     if len(balls) >= 3 and balls[-3:] == ["W", "W", "W"] and "HAT" not in announced:
                         announced.add("HAT")
-                        await client.send_message(chat_id, f"🎩 <b>HAT-TRICK!</b>\n<i>{_mention(bowler_id, match)} takes three in three 😱</i>", parse_mode=ParseMode.HTML)
+                        asyncio.create_task(_send_achievement_media(client, chat_id, "HAT_TRICK", f"🎩 <b>HAT-TRICK!</b>\n<i>{_mention(bowler_id, match)} takes three in three 😱</i>"))
 
             match["current_over_balls"].append("W")
             match["total_balls"] += 1
@@ -685,63 +687,46 @@ async def end_over(match):
         except:
             pass
 
-    try:
-        import asyncio, httpx
+    async def _do_ai_summary():
+        try:
+            import httpx
+            bat_team_snap = match.get("teams", {}).get(match.get("batting_team"), {})
+            runs = bat_team_snap.get("runs", 0)
+            wickets = bat_team_snap.get("wickets", 0)
+            over_runs = sum(b for b in last_over_balls if isinstance(b, int))
+            over_wkts = last_over_balls.count("W")
 
-        await asyncio.sleep(2)
-
-        bat_team = match.get("teams", {}).get(match.get("batting_team"), {})
-        runs = bat_team.get("runs", 0)
-        wickets = bat_team.get("wickets", 0)
-
-        over_runs = sum(0 if b == "W" else b for b in last_over_balls if isinstance(b, (int, str)))
-        over_wkts = last_over_balls.count("W")
-
-        prompt = f"""
-You are a cricket commentator AI.
-Tone: funny, savage, professional.
-Short: 2–3 lines only.
-
-Over number: {completed_over}
-Runs this over: {over_runs}
-Wickets this over: {over_wkts}
-Total score: {runs}/{wickets}
-
-Give a sharp over reaction.
-"""
-
-        payload = {
-            "model": "meta/llama-3.1-70b-instruct",
-            "messages": [
-                {"role": "system", "content": "You comment on cricket overs."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.85,
-            "max_tokens": 120
-        }
-
-        headers = {
-            "Authorization": f"Bearer {NVIDIA_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        async with httpx.AsyncClient(timeout=15) as ai:
-            r = await ai.post(
-                "https://integrate.api.nvidia.com/v1/chat/completions",
-                json=payload,
-                headers=headers
+            prompt = (
+                f"You are a cricket commentator AI.\n"
+                f"Tone: funny, savage, professional. Short: 2–3 lines only.\n"
+                f"Over {completed_over}: {over_runs} runs, {over_wkts} wickets. "
+                f"Total: {runs}/{wickets}. Give a sharp over reaction."
             )
+            payload = {
+                "model": "meta/llama-3.1-70b-instruct",
+                "messages": [
+                    {"role": "system", "content": "You are a cricket commentator."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.85,
+                "max_tokens": 120,
+            }
+            async with httpx.AsyncClient(timeout=15) as ai:
+                r = await ai.post(
+                    "https://integrate.api.nvidia.com/v1/chat/completions",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Content-Type": "application/json"},
+                )
+            ai_text = r.json()["choices"][0]["message"]["content"]
+            await client.send_message(
+                chat_id,
+                f"🧠 <b>OVER ANALYSIS</b>\n────┈┄┄╌╌╌╌┄┄┈────\n{ai_text}",
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception as e:
+            print("❌ Over AI analysis failed:", e)
 
-        ai_text = r.json()["choices"][0]["message"]["content"]
-
-        await client.send_message(
-            chat_id,
-            f"🧠 <b>OVER ANALYSIS</b>\n────┈┄┄╌╌╌╌┄┄┈────\n{ai_text}",
-            parse_mode=ParseMode.HTML
-        )
-
-    except Exception as e:
-        print("❌ Over AI analysis failed:", e)
+    asyncio.create_task(_do_ai_summary())
 
     if completed_over >= match.get("overs", 0):
         from plugins.game.team.over_engine import end_innings

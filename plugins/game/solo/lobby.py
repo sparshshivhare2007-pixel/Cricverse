@@ -197,7 +197,7 @@ async def _join_solo_game_db(game_id, user):
         print(f"Solo join DB (bg) error: {e}")
 
 
-@Client.on_message(filters.command("leave") & filters.group)
+@Client.on_message(filters.command("leavegame") & filters.group)
 async def leave_solo_game(client, message):
     chat_id = message.chat.id
     user = message.from_user

@@ -1,12 +1,11 @@
 import asyncio
 import random
 import html
-import io
 from pyrogram.enums import ParseMode
 from pyrogram.errors import FloodWait
 
 from plugins.game.team import ACTIVE_MATCHES
-from plugins.game.solo import get_next_solo_bowler, build_solo_score_text, PLAYZONE_BTN
+from plugins.game.solo import get_next_solo_bowler, build_solo_score_text, PLAYZONE_BTN, _calc_sr, _calc_eco
 
 BATTER_LINES = {
     50: [
@@ -64,6 +63,14 @@ BOWLER_LINES = {
     ],
 }
 
+DUCK_LINES = [
+    "🦆 DUCK! {p} walks back without troubling the scorer.",
+    "🦆 Zero! {p} couldn't even get off the mark!",
+    "🦆 Golden duck for {p}. The bowling attack is celebrating 🎉",
+    "🦆 Out for a DUCK! {p} needs to hit the nets hard.",
+    "🦆 {p} scores 0. Tough day at the office 😬",
+]
+
 
 def _mention(match, uid):
     name = match.get("user_cache", {}).get(uid, "Player")
@@ -86,7 +93,7 @@ async def _safe_send_msg(client, chat_id, text, parse_mode=ParseMode.HTML, reply
 
 async def _send_achievement(client, chat_id, key, caption):
     from Assets.files import ACHIEVE_VIDEOS, ACHIEVE_IMG
-    videos = ACHIEVE_VIDEOS.get(key, [])
+    videos = [v for v in ACHIEVE_VIDEOS.get(key, []) if v and not v.startswith("FILE_ID")]
     if videos:
         file_id = random.choice(videos)
         try:
@@ -138,6 +145,10 @@ async def solo_advance_ball(match, result, credit_bowler=True):
             batter_stats["balls_faced"] += 1
             batter_stats["is_out"] = True
             batter_stats["batting_balls"].append("W")
+
+            is_duck = batter_stats["runs"] == 0
+            if is_duck:
+                asyncio.create_task(_check_duck_achievement(client, chat_id, match, batter_id))
 
             if credit_bowler and bowler_id and bowler_stats:
                 bowler_stats["wickets"] += 1
@@ -266,32 +277,22 @@ async def _end_solo_match(match, forced=False):
     match["phase"] = "finished"
 
     try:
-        from plugins.game.solo.scorecard import build_solo_end_card
-        card_buf = build_solo_end_card(match)
         caption = _build_final_scorecard_text(match)
         try:
-            await client.send_photo(
-                chat_id=chat_id, photo=card_buf,
-                caption=caption, parse_mode=ParseMode.HTML,
+            await client.send_message(
+                chat_id, caption,
+                parse_mode=ParseMode.HTML,
                 reply_markup=PLAYZONE_BTN,
             )
         except FloodWait as e:
             await asyncio.sleep(e.value)
-            await client.send_photo(
-                chat_id=chat_id, photo=card_buf,
-                caption=caption, parse_mode=ParseMode.HTML,
+            await client.send_message(
+                chat_id, caption,
+                parse_mode=ParseMode.HTML,
                 reply_markup=PLAYZONE_BTN,
             )
     except Exception as e:
-        print(f"Solo end card error: {e}")
-        try:
-            await _safe_send_msg(
-                client, chat_id,
-                _build_final_scorecard_text(match),
-                reply_markup=PLAYZONE_BTN,
-            )
-        except Exception:
-            pass
+        print(f"Solo end scorecard error: {e}")
 
     try:
         from database.games import end_game as close_db_game
@@ -308,7 +309,7 @@ async def _save_solo_stats(match):
     stats = match.get("player_stats", {})
     try:
         from database.connection import db
-        pool = await db.ensure_pool() or db.pool
+        await db.ensure_pool()
         if not db.pool:
             return
         async with db.pool.acquire() as conn:
@@ -353,12 +354,6 @@ async def _save_solo_stats(match):
         print(f"Solo stats save error: {e}")
 
 
-def _calc_sr(runs, balls):
-    if balls == 0:
-        return "0.0"
-    return f"{(runs / balls * 100):.1f}"
-
-
 def _build_final_scorecard_text(match):
     players = match.get("players", [])
     stats = match.get("player_stats", {})
@@ -389,11 +384,12 @@ def _build_final_scorecard_text(match):
         wkts = p.get("wickets", 0)
         r_conceded = p.get("runs_conceded", 0)
         sr = _calc_sr(runs, balls)
+        eco = _calc_eco(r_conceded, b_bowled)
 
         lines.append(
             f"❖ <b>{name}</b> — {runs} ({balls})\n"
             f"➥ 4️⃣: {fours} | 6️⃣: {sixes} ⟶ SR : {sr}\n"
-            f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs"
+            f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs | Eco: {eco}"
         )
 
     lines.append("────┈┄┄╌╌╌╌┄┄┈────")
@@ -413,6 +409,13 @@ def _build_final_scorecard_text(match):
     lines.append("✨ GG! | ʟᴇɢᴀᴄʏ ᴄʀɪᴄᴋᴇᴛ")
 
     return "\n\n".join(lines)
+
+
+async def _check_duck_achievement(client, chat_id, match, batter_id):
+    name = _mention(match, batter_id)
+    text = random.choice(DUCK_LINES).format(p=name)
+    caption = f"🦆 <b>Duck!</b>\n<i>{text}</i>"
+    asyncio.create_task(_send_achievement(client, chat_id, "Duck", caption))
 
 
 async def _check_batter_achievements(client, chat_id, match, batter_id, p):
