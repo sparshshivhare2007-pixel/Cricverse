@@ -122,17 +122,17 @@ async def personality_cmd(client, message):
     winstr = f"{wins}/{matches}"
 
     text = (
-        f"🧬 <b>Cricket DNA — {user.first_name}</b>\n"
+        f"🧬 <b>Cricket DNA ❖ {user.first_name}</b>\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n\n"
         f"{info['color']} <b>{dna}</b>\n"
         f"<i>{info['tagline']}</i>\n\n"
         f"⚡ <b>Trait:</b> {info['trait']}\n"
         f"💡 <b>Tip:</b> {info['tip']}\n\n"
         "📊 <b>Your Numbers:</b>\n"
-        f"  🏃 Runs: <b>{runs}</b>  |  ⚾ Wickets: <b>{wickets}</b>\n"
-        f"  ⚡ SR: <b>{sr}</b>  |  🎯 Eco: <b>{eco}</b>\n"
-        f"  💯 Centuries: <b>{centuries}</b>  |  🏅 MOMs: <b>{moms}</b>\n"
-        f"  🔥 Sixes: <b>{sixes}</b>  |  🏆 Win Rate: <b>{wr}</b> ({winstr})\n\n"
+        f"➥ 🏃 Runs: <b>{runs}</b>  |  Wickets: <b>{wickets}</b>\n"
+        f"➥ ⚡ SR: <b>{sr}</b>  |  Eco: <b>{eco}</b>\n"
+        f"➥ 💯 Centuries: <b>{centuries}</b>  |  MOMs: <b>{moms}</b>\n"
+        f"➥ 🔥 Sixes: <b>{sixes}</b>  |  Win Rate: <b>{wr}</b> ({winstr})\n\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n"
         "✨ <i>DNA evolves with every match you play.</i>"
     )
