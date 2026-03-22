@@ -38,17 +38,31 @@ RUN_VIDEOS = {
         "BAACAgEAAxkBAAOoaWyI1b1nZW1NfCYdNf84TISPo5AAAtQEAAJDr2lHzGZSUlL_rUUeBA",
         "BAACAgEAAxkBAAIChmluFb3bru6KEMprvvhb4LZZNMPWAAI2CgACOIFwR-a7qPS5e1-yHgQ"
     ],
-    "Batting": ["BAACAgEAAxkBAAOraWyJENRxMF0V3JwGuvkqy02n_p4AAtUEAAJDr2lHJ4ZPTDFwtsceBA"],
-    "Bowling": ["BAACAgEAAxkBAAMsaWuZhdw3n9JEZpBUPDH6T-J-JwoAAusGAAInrEFHrY3sqPEFBvQeBA"],
-    "Opening": ["BAACAgEAAxkBAAIB9WluCP9GK0OLtfReSwQ_HnDtlGXZAAIlCgACOIFwR12NFmuc0f0fHgQ"],
+    "Batting": [ "BAACAgEAAxkBAAOraWyJENRxMF0V3JwGuvkqy02n_p4AAtUEAAJDr2lHJ4ZPTDFwtsceBA", ],
+    "Bowling": [ "BAACAgEAAxkBAAMsaWuZhdw3n9JEZpBUPDH6T-J-JwoAAusGAAInrEFHrY3sqPEFBvQeBA", ],
+    "Opening": [ "BAACAgEAAxkBAAIB9WluCP9GK0OLtfReSwQ_HnDtlGXZAAIlCgACOIFwR12NFmuc0f0fHgQ",]
 }
 
+
+
 ACHIEVE_VIDEOS = {
-    50:  ["BAACAgEAAxkBAAOiaWyIXTlIrNJvddpBwpXSHHOeOzkAAtIEAAJDr2lHzkSQ9x5h2wQeBA"],
-    100: ["CgACAgEAAxkBAAN1aWxkVmme_zPYWbiGcvG79P1iJSIAAsIEAAJDr2lHd54khb0aTNgeBA"],
-    150: ["CgACAgEAAxkBAAN1aWxkVmme_zPYWbiGcvG79P1iJSIAAsIEAAJDr2lHd54khb0aTNgeBA"],
-    250: ["CgACAgEAAxkBAAN1aWxkVmme_zPYWbiGcvG79P1iJSIAAsIEAAJDr2lHd54khb0aTNgeBA"],
-    3:   ["BAACAgEAAxkBAAOfaWyIQmaU95kHweaviv6zuN1-p3QAAtEEAAJDr2lHvgSV16zS5W0eBA"],
-    5:   ["BAACAgEAAxkBAAOoaWyI1b1nZW1NfCYdNf84TISPo5AAAtQEAAJDr2lHzGZSUlL_rUUeBA"],
-    "HAT_TRICK": ["BAACAgEAAxkBAAIChmluFb3bru6KEMprvvhb4LZZNMPWAAI2CgACOIFwR-a7qPS5e1-yHgQ"],
+    # 🏏 Batting Milestones
+    "50": [
+        "CgACAgQAAxkBAAOFab9XXXwbw6GUJKBYCXTDklZASwcAAvoDAAJAiIVQN4EegvsVk08eBA",
+        "FILE_ID_2"
+    ],
+    "100": [
+        "FILE_ID_1"
+    ],
+    "150": [],
+    "250": [],
+
+    # 🎯 Bowling Milestones
+    "3": [
+        "FILE_ID_1"
+    ],
+    "5": [
+        "FILE_ID_1",
+        "FILE_ID_2"
+    ],
 }
