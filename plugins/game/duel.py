@@ -270,6 +270,7 @@ async def _end_duel(client, match, winner):
     USER_IN_DUEL.pop(uid_b, None)
 
     asyncio.create_task(_save_duel_stats(match, winner_id, loser_id))
+    asyncio.create_task(_send_duel_log(client, match, winner_name, loser_name, winner_score, loser_score))
 
 
 async def _save_duel_stats(match, winner_id, loser_id):
@@ -500,6 +501,33 @@ async def duel_pick(client, query):
 
     if match["pending_bat_choice"] is not None and match["pending_bowl_choice"] is not None:
         asyncio.create_task(_process_ball(client, match))
+
+
+@Client.on_message(filters.command("duel") & filters.private)
+async def duel_private_cmd(client, message):
+    text, buttons = get_duel_matchmaking_card()
+    await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=buttons)
+
+
+async def _send_duel_log(client, match, winner_name, loser_name, winner_score, loser_score):
+    from config import Config
+    try:
+        log_channel = Config.LOG_CHANNEL
+        if not log_channel:
+            return
+        uid_a = match["player_a"]
+        uid_b = match["player_b"]
+        text = (
+            "⚔️ <b>1v1 DUEL COMPLETED</b>\n"
+            "──┈┄┄╌╌╌╌┄┄┈──\n"
+            f"🏆 <b>Winner:</b> {html.escape(winner_name)} — {winner_score} runs\n"
+            f"😔 <b>Loser:</b> {html.escape(loser_name)} — {loser_score} runs\n\n"
+            f"🔢 <b>Player A ID:</b> <code>{uid_a}</code>\n"
+            f"🔢 <b>Player B ID:</b> <code>{uid_b}</code>"
+        )
+        await client.send_message(log_channel, text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        print(f"Duel log error: {e}")
 
 
 def get_duel_matchmaking_card():

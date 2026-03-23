@@ -246,14 +246,12 @@ async def solo_bowler_dm(client, message):
     chat_id = match["chat_id"]
     back_btn = get_back_btn(chat_id)
 
-    asyncio.create_task(safe_send(message.reply_text("⚾️", quote=True)))
-    asyncio.create_task(
-        safe_send(message.reply_text(
-            f"✅ <b>Ball Delivered: {message.text}</b>\nReturn to the group!",
-            reply_markup=back_btn,
-            parse_mode=ParseMode.HTML,
-        ))
-    )
+    await safe_send(message.reply_text("⚾️", quote=True))
+    await safe_send(message.reply_text(
+        f"✅ <b>Ball Delivered: {message.text}</b>\nReturn to the group!",
+        reply_markup=back_btn,
+        parse_mode=ParseMode.HTML,
+    ))
 
     batter_id = match["current_batter"]
     batter_name = html.escape(match.get("user_cache", {}).get(batter_id, "Batter"))
@@ -316,7 +314,7 @@ async def solo_batter_handler(client, message):
 
     match["batted"] = True
 
-    asyncio.create_task(safe_send(message.reply_text("👍", quote=True)))
+    await safe_send(message.reply_text("👍", quote=True))
 
     bowl_num = match.get("last_bowl")
 

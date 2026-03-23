@@ -301,6 +301,7 @@ async def _end_solo_match(match, forced=False):
         print(f"Solo end DB error: {e}")
 
     asyncio.create_task(_save_solo_stats(match))
+    asyncio.create_task(_send_solo_log(client, match))
     ACTIVE_MATCHES.pop(chat_id, None)
     print(f"✅ Solo match in {chat_id} ended{'(forced)' if forced else ''}.")
 
@@ -365,6 +366,57 @@ async def _save_solo_stats(match):
                 )
     except Exception as e:
         print(f"Solo stats save error: {e}")
+
+
+async def _send_solo_log(client, match):
+    from config import Config
+    try:
+        log_channel = Config.LOG_CHANNEL
+        if not log_channel:
+            return
+
+        players = match.get("players", [])
+        stats = match.get("player_stats", {})
+        user_cache = match.get("user_cache", {})
+        chat_id = match.get("chat_id", "Unknown")
+        total_runs = match.get("total_runs", 0)
+        total_balls = match.get("total_balls", 0)
+        overs = f"{total_balls // 6}.{total_balls % 6}"
+
+        top_scorer_id, top_runs = None, -1
+        for uid in players:
+            r = stats.get(uid, {}).get("runs", 0)
+            if r > top_runs:
+                top_runs = r
+                top_scorer_id = uid
+
+        mvp_name = user_cache.get(top_scorer_id, "Unknown") if top_scorer_id else "—"
+        mvp_runs = top_runs if top_scorer_id else 0
+
+        lines = []
+        for uid in players:
+            p = stats.get(uid, {})
+            name = user_cache.get(uid, "Player")
+            r = p.get("runs", 0)
+            b = p.get("balls_faced", 0)
+            w = p.get("wickets", 0)
+            lines.append(f"  • {name}: {r}({b}b) | {w}wkts")
+
+        scorelines = "\n".join(lines) if lines else "  —"
+
+        text = (
+            "🏏 <b>SOLO MATCH COMPLETED</b>\n"
+            "──┈┄┄╌╌╌╌┄┄┈──\n"
+            f"💬 <b>Group ID:</b> <code>{chat_id}</code>\n"
+            f"👥 <b>Players:</b> {len(players)}\n"
+            f"📊 <b>Total Score:</b> {total_runs} / {overs} ov\n"
+            f"⭐ <b>MVP:</b> {mvp_name} — {mvp_runs} runs\n\n"
+            f"<b>Scoreboard:</b>\n{scorelines}"
+        )
+
+        await client.send_message(log_channel, text, parse_mode="html")
+    except Exception as e:
+        print(f"Solo log error: {e}")
 
 
 def _build_final_scorecard_text(match):

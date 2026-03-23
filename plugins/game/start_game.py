@@ -30,16 +30,37 @@ async def start_game(client, message):
         ]
     )
 
-    await message.reply_photo(
-        photo=START_IMAGE_GROUP,
-        caption=(
-            "🎮 <b>SELECT MODE</b>\n"
-            "Choose how you want to play today 👇\n\n"
-            "⚔️ <i>1v1 Duel — tap to open bot DM and queue!</i>"
-        ),
-        parse_mode=ParseMode.HTML,
-        reply_markup=buttons
+    caption = (
+        "🎮 <b>SELECT MODE</b>\n"
+        "Choose how you want to play today 👇\n\n"
+        "⚔️ <i>1v1 Duel — tap to open bot DM and queue!</i>"
     )
+
+    can_send_media = False
+    try:
+        me = await client.get_me()
+        member = await client.get_chat_member(chat_id, me.id)
+        if member.status.name == "ADMINISTRATOR":
+            perms = getattr(member.privileges, "can_send_media_messages", True)
+            can_send_media = perms is not False
+        else:
+            can_send_media = True
+    except Exception:
+        can_send_media = True
+
+    if can_send_media:
+        try:
+            await message.reply_photo(
+                photo=START_IMAGE_GROUP,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+                reply_markup=buttons
+            )
+            return
+        except Exception:
+            pass
+
+    await message.reply_text(caption, parse_mode=ParseMode.HTML, reply_markup=buttons)
 
 @Client.on_callback_query(filters.regex("^mode_cancel$"))
 async def cancel_start(client, query):

@@ -108,8 +108,8 @@ async def solo_mode_selected(client, query):
             caption=(
                 "👤 <b>𝗦𝗢𝗟𝗢 𝗠𝗢𝗗𝗘 𝗦𝗘𝗟𝗘𝗖𝗧𝗘𝗗</b>\n"
                 "────┈┄┄╌╌╌╌┄┄┈────\n\n"
-                "📢 Join using <code>/joingame</code>\n"
-                "📤 Leave using <code>/leave</code>\n"
+                "📢 Join using /joingame\n"
+                "📤 Leave using /leavegame\n"
                 f"⏳ Lobby closes in <b>{SOLO_JOIN_SECONDS // 60} minutes</b>.\n"
                 "⚡ Minimum <b>3 players</b> required to start.\n\n"
                 "🔧 Admins: <code>/extend 30</code> | <code>/forcestart</code>"
@@ -119,7 +119,7 @@ async def solo_mode_selected(client, query):
     except Exception:
         await client.send_message(
             chat_id,
-            "👤 <b>𝗦𝗢𝗟𝗢 𝗠𝗢𝗗𝗘</b> — Join via <code>/joingame</code>\n"
+            "👤 <b>𝗦𝗢𝗟𝗢 𝗠𝗢𝗗𝗘</b> — Join via /joingame\n"
             f"⏳ Closes in {SOLO_JOIN_SECONDS // 60} min | Min 3 players",
             parse_mode=ParseMode.HTML,
         )
