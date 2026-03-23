@@ -369,9 +369,9 @@ async def _save_solo_stats(match):
 
 
 async def _send_solo_log(client, match):
-    from config import Config
     try:
-        log_channel = Config.LOG_CHANNEL
+        from config import Config
+        log_channel = getattr(Config, "LOG_CHANNEL", None)
         if not log_channel:
             return
 
@@ -414,9 +414,12 @@ async def _send_solo_log(client, match):
             f"<b>Scoreboard:</b>\n{scorelines}"
         )
 
-        await client.send_message(log_channel, text, parse_mode="html")
+        await asyncio.wait_for(
+            client.send_message(log_channel, text, parse_mode="html"),
+            timeout=10,
+        )
     except Exception as e:
-        print(f"Solo log error: {e}")
+        print(f"[Solo log bg] {e}")
 
 
 def _build_final_scorecard_text(match):

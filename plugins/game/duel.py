@@ -503,6 +503,23 @@ async def duel_pick(client, query):
         asyncio.create_task(_process_ball(client, match))
 
 
+@Client.on_message(filters.command("duel") & filters.group)
+async def duel_group_cmd(client, message):
+    from config import Config
+    bot_username = Config.BOT_USERNAME.lstrip("@")
+    buttons = InlineKeyboardMarkup([[
+        InlineKeyboardButton("⚔️ Play 1v1 Duel in DM", url=f"https://t.me/{bot_username}?start=duel")
+    ]])
+    await message.reply_text(
+        "⚔️ <b>1v1 Duel Mode</b>\n"
+        "────┈┄┄╌╌╌╌┄┄┈────\n\n"
+        "Duels happen <b>in the bot DM</b>!\n"
+        "Tap below to open a chat with the bot and join the queue 👇",
+        parse_mode=ParseMode.HTML,
+        reply_markup=buttons,
+    )
+
+
 @Client.on_message(filters.command("duel") & filters.private)
 async def duel_private_cmd(client, message):
     text, buttons = get_duel_matchmaking_card()
@@ -510,9 +527,9 @@ async def duel_private_cmd(client, message):
 
 
 async def _send_duel_log(client, match, winner_name, loser_name, winner_score, loser_score):
-    from config import Config
     try:
-        log_channel = Config.LOG_CHANNEL
+        from config import Config
+        log_channel = getattr(Config, "LOG_CHANNEL", None)
         if not log_channel:
             return
         uid_a = match["player_a"]
@@ -525,9 +542,12 @@ async def _send_duel_log(client, match, winner_name, loser_name, winner_score, l
             f"🔢 <b>Player A ID:</b> <code>{uid_a}</code>\n"
             f"🔢 <b>Player B ID:</b> <code>{uid_b}</code>"
         )
-        await client.send_message(log_channel, text, parse_mode=ParseMode.HTML)
+        await asyncio.wait_for(
+            client.send_message(log_channel, text, parse_mode=ParseMode.HTML),
+            timeout=10,
+        )
     except Exception as e:
-        print(f"Duel log error: {e}")
+        print(f"[Duel log bg] {e}")
 
 
 def get_duel_matchmaking_card():
