@@ -81,10 +81,10 @@ async def build_over_summary(client, match):
 
     lines = [
         f"📋 <b>Over {completed_over} Summary</b>",
-        "───┈┄┄╌╌╌╌┄┄┈────",
+        "────╌╌┄┄┈───",
         team_line("A"),
         team_line("B"),
-        "────┈┄┄╌╌╌╌┄┄┈───",
+        "────╌╌┄┄┈───",
     ]
 
     if player_lines:
@@ -92,7 +92,7 @@ async def build_over_summary(client, match):
         lines.extend(player_lines)
 
     lines += [
-        "────┈┄┄╌╌╌╌┄┄┈────",
+        ""────╌╌┄┄┈───",
         f"🕒 Last Over: <code>[ {recent} ]</code>",
         f"🤝 Partnership: <b>{partnership_runs}</b> ({partnership_balls}b)",
         f"👉 On Strike: {next_batter}",
@@ -112,7 +112,7 @@ async def build_innings_summary(client, match):
 
     lines = [
         f"🏁 <b>ɪɴɴɪɴɢs ᴄᴏᴍᴘʟᴇᴛᴇᴅ</b>",
-        "× •-•-•-•-•-••-•-•⟮ 🏏 ⟯•-•-•-•-•-•-•-•-• ×\n",
+        "× •-•-•-••-•-•⟮ 🏏 ⟯•-•-•-•-•-•-• ×\n",
         f"🏏 <b>Tᴇᴀᴍ {finished_team_key} Fɪɴᴀʟ Sᴄᴏʀᴇ: {data.get('runs', 0)}/{data.get('wickets', 0)}</b> ⊰─\n"
     ]
 
@@ -148,7 +148,7 @@ async def build_match_summary(client, match, winner):
     res = [
         "🏆 <b>ᴍᴀᴛᴄʜ ᴄᴏɴᴄʟᴜᴅᴇᴅ</b> 🏆",
         f"✨ <b>ᴡɪɴɴᴇʀ: ᴛᴇᴀᴍ {winner}</b>\n",
-        "× •-•-•-•-•-••-•-•⟮ 📊 ⟯•-•-•-•-•-•-•-•-• ×"
+        "× •-•-•-••-•-•⟮ 📊 ⟯•-•-•-•-•-•-• ×"
     ]
 
     motm_name = "N/A"
@@ -183,7 +183,7 @@ async def build_match_summary(client, match, winner):
                     raw_motm = user_cache.get(uid, "Player")
                     motm_name = html.escape(raw_motm)
 
-    res.append("\n× •-•-•-•-•-••-•-•⟮ 🎖 ⟯•-•-•-•-•-•-•-•-• ×")
+    res.append("\n× •-•-•-••-•-•⟮ 🎖 ⟯•-•-•-•-•-•-• ×")
     res.append(f"\n🎖 <b>ᴍᴀɴ ᴏғ ᴛʜᴇ ᴍᴀᴛᴄʜ</b>")
     res.append(f"🌟 <b>{motm_name}</b> ({motm_score} pts)")
     res.append("\n─────⊱◈◈◈⊰─────")
