@@ -231,18 +231,27 @@ async def _next_batter_or_end(match):
     players = match["players"]
     current_batter = match.get("current_batter")
 
+    from plugins.game.solo import is_solo_banned
+
     try:
         current_idx = players.index(current_batter)
     except ValueError:
         await _end_solo_match(match)
         return
 
-    next_idx = current_idx + 1
-    if next_idx >= len(players):
+    next_batter = None
+    search_idx = current_idx + 1
+    while search_idx < len(players):
+        candidate = players[search_idx]
+        if not is_solo_banned(chat_id, candidate):
+            next_batter = candidate
+            break
+        search_idx += 1
+
+    if next_batter is None:
         await _end_solo_match(match)
         return
 
-    next_batter = players[next_idx]
     match["current_batter"] = next_batter
 
     current_bowler = match.get("current_bowler")

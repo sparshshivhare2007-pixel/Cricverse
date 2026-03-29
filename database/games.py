@@ -6,7 +6,7 @@ from database.connection import db
 
 async def _col():
     await db.ensure_pool()
-    if not db.db:
+    if db.db is None:
         raise RuntimeError("Database unavailable. Please try again in a moment.")
     return db.db
 

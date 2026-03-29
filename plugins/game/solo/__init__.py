@@ -1,3 +1,4 @@
+import time
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from plugins.game.team import ACTIVE_MATCHES
 
@@ -6,16 +7,43 @@ PLAYZONE_BTN = InlineKeyboardMarkup([[
     InlineKeyboardButton("ʟᴇɢᴀᴄʏ ᴘʟᴀʏᴢᴏɴᴇ 🏏", url="https://t.me/CLG_fun_zone")
 ]])
 
+SOLO_TIMEOUT_BANS: dict = {}
+SOLO_BAN_MINUTES = 15
+
+
+def is_solo_banned(chat_id: int, user_id: int) -> bool:
+    key = (chat_id, user_id)
+    expire = SOLO_TIMEOUT_BANS.get(key)
+    if expire is None:
+        return False
+    if time.time() > expire:
+        SOLO_TIMEOUT_BANS.pop(key, None)
+        return False
+    return True
+
+
+def ban_solo_user(chat_id: int, user_id: int, minutes: int = SOLO_BAN_MINUTES):
+    SOLO_TIMEOUT_BANS[(chat_id, user_id)] = time.time() + minutes * 60
+
+
+def ban_remaining_seconds(chat_id: int, user_id: int) -> int:
+    expire = SOLO_TIMEOUT_BANS.get((chat_id, user_id))
+    if expire is None:
+        return 0
+    remaining = expire - time.time()
+    return max(0, int(remaining))
+
 
 def get_next_solo_bowler(match):
     players = match["players"]
     current_batter = match["current_batter"]
+    chat_id = match.get("chat_id")
     n = len(players)
     start_pos = match.get("bowler_rotation_pos", 1)
     for offset in range(n):
         pos = (start_pos + offset) % n
         candidate = players[pos]
-        if candidate != current_batter:
+        if candidate != current_batter and not is_solo_banned(chat_id, candidate):
             match["bowler_rotation_pos"] = (pos + 1) % n
             return candidate
     return None

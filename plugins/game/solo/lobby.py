@@ -65,7 +65,7 @@ async def solo_mode_selected(client, query):
     if other:
         return await query.answer("⚠️ You are already in another game.", show_alert=True)
 
-    game_id = uuid.uuid4()
+    game_id = str(uuid.uuid4())
     group_title = query.message.chat.title or "Cricket Arena"
     join_ends_at = time.time() + SOLO_JOIN_SECONDS
 
@@ -100,6 +100,7 @@ async def solo_mode_selected(client, query):
         },
         "last_active": time.time(),
         "announced_achievements": {"batting": {}, "bowling": {}},
+        "timeout_strikes": {},
     }
     match = ACTIVE_MATCHES[chat_id]
 
@@ -158,6 +159,18 @@ async def join_solo_game(client, message):
 
     if user.id in match["players"]:
         return await message.reply_text("😏 You're already in the lobby.")
+
+    from plugins.game.solo import is_solo_banned, ban_remaining_seconds
+    if is_solo_banned(chat_id, user.id):
+        secs = ban_remaining_seconds(chat_id, user.id)
+        mins = secs // 60
+        s = secs % 60
+        return await message.reply_text(
+            f"🔴 <b>You are temporarily banned from Solo games in this group.</b>\n"
+            f"⏳ Ban expires in <b>{mins}m {s}s</b>.\n"
+            "Reason: Too many timeout eliminations.",
+            parse_mode=ParseMode.HTML,
+        )
 
     other = await user_in_other_game(user.id, chat_id)
     if other:
