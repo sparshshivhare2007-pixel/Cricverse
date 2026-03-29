@@ -275,57 +275,46 @@ async def _end_duel(client, match, winner):
 
 async def _save_duel_stats(match, winner_id, loser_id):
     try:
-        await db.ensure_pool()
-        async with db.pool.acquire() as conn:
-            uid_a = match["player_a"]
-            uid_b = match["player_b"]
-            a_score = match["a_score"]
-            b_score = match["b_score"]
-            a_balls = match["a_balls"]
-            b_balls = match["b_balls"]
-            a_duck = 1 if a_score == 0 else 0
-            b_duck = 1 if b_score == 0 else 0
+        uid_a = match["player_a"]
+        uid_b = match["player_b"]
+        a_score = match["a_score"]
+        b_score = match["b_score"]
+        a_balls = match["a_balls"]
+        b_balls = match["b_balls"]
+        a_duck = 1 if a_score == 0 else 0
+        b_duck = 1 if b_score == 0 else 0
 
-            a_wickets = 1
-            b_wickets = 1 if match["phase"] == "finished" and winner_id == uid_a else 0
+        a_wickets = 1
+        b_wickets = 1 if match["phase"] == "finished" and winner_id == uid_a else 0
 
-            await conn.execute(
-                """
-                INSERT INTO duel_stats (user_id, matches, wins, losses, runs, wickets, highest_score, ducks)
-                VALUES ($1, 1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    matches = duel_stats.matches + 1,
-                    wins = duel_stats.wins + $2,
-                    losses = duel_stats.losses + $3,
-                    runs = duel_stats.runs + $4,
-                    wickets = duel_stats.wickets + $5,
-                    highest_score = GREATEST(duel_stats.highest_score, $6),
-                    ducks = duel_stats.ducks + $7
-                """,
-                uid_a,
-                1 if winner_id == uid_a else 0,
-                1 if winner_id != uid_a else 0,
-                a_score, a_wickets, a_score, a_duck
-            )
-
-            await conn.execute(
-                """
-                INSERT INTO duel_stats (user_id, matches, wins, losses, runs, wickets, highest_score, ducks)
-                VALUES ($1, 1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    matches = duel_stats.matches + 1,
-                    wins = duel_stats.wins + $2,
-                    losses = duel_stats.losses + $3,
-                    runs = duel_stats.runs + $4,
-                    wickets = duel_stats.wickets + $5,
-                    highest_score = GREATEST(duel_stats.highest_score, $6),
-                    ducks = duel_stats.ducks + $7
-                """,
-                uid_b,
-                1 if winner_id == uid_b else 0,
-                1 if winner_id != uid_b else 0,
-                b_score, b_wickets, b_score, b_duck
-            )
+        for uid, score, wickets, duck, is_win in [
+            (uid_a, a_score, a_wickets, a_duck, winner_id == uid_a),
+            (uid_b, b_score, b_wickets, b_duck, winner_id == uid_b),
+        ]:
+            existing = await db.db["duel_stats"].find_one({"user_id": uid})
+            if existing:
+                await db.db["duel_stats"].update_one(
+                    {"user_id": uid},
+                    {"$inc": {
+                        "matches": 1,
+                        "wins": 1 if is_win else 0,
+                        "losses": 0 if is_win else 1,
+                        "runs": score,
+                        "wickets": wickets,
+                        "ducks": duck,
+                    }, "$max": {"highest_score": score}}
+                )
+            else:
+                await db.db["duel_stats"].insert_one({
+                    "user_id": uid,
+                    "matches": 1,
+                    "wins": 1 if is_win else 0,
+                    "losses": 0 if is_win else 1,
+                    "runs": score,
+                    "wickets": wickets,
+                    "highest_score": score,
+                    "ducks": duck,
+                })
     except Exception as e:
         print(f"Duel stats save error: {e}")
 

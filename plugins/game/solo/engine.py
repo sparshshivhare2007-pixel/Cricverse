@@ -310,59 +310,49 @@ async def _save_solo_stats(match):
     stats = match.get("player_stats", {})
     try:
         from database.connection import db
-        await db.ensure_pool()
-        if not db.pool:
-            return
-        async with db.pool.acquire() as conn:
-            for uid, p in stats.items():
-                runs = p.get("runs", 0)
-                wickets = p.get("wickets", 0)
-                is_out = 1 if p.get("is_out") else 0
-                fours = p.get("fours_count", 0)
-                sixes = p.get("sixes_count", 0)
-                b_faced = p.get("balls_faced", 0)
-                b_bowled = p.get("balls_bowled", 0)
-                r_conceded = p.get("runs_conceded", 0)
-                is_50 = 1 if 50 <= runs < 100 else 0
-                is_100 = 1 if runs >= 100 else 0
-                is_duck = 1 if runs == 0 and is_out else 0
+        from datetime import datetime
+        for uid, p in stats.items():
+            runs = p.get("runs", 0)
+            wickets = p.get("wickets", 0)
+            is_out = 1 if p.get("is_out") else 0
+            fours = p.get("fours_count", 0)
+            sixes = p.get("sixes_count", 0)
+            b_faced = p.get("balls_faced", 0)
+            b_bowled = p.get("balls_bowled", 0)
+            r_conceded = p.get("runs_conceded", 0)
+            is_50 = 1 if 50 <= runs < 100 else 0
+            is_100 = 1 if runs >= 100 else 0
+            is_duck = 1 if runs == 0 and is_out else 0
 
-                await conn.execute(
-                    """
-                    INSERT INTO user_stats (
-                        user_id, matches, wins, losses, runs, wickets,
-                        balls_faced, balls_bowled, runs_conceded, fours, sixes,
-                        moms, centuries, fifties, ducks
-                    )
-                    VALUES ($1, 1, 0, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $11, $12)
-                    ON CONFLICT (user_id) DO UPDATE SET
-                        matches = user_stats.matches + 1,
-                        runs = user_stats.runs + $3,
-                        wickets = user_stats.wickets + $4,
-                        balls_faced = user_stats.balls_faced + $5,
-                        balls_bowled = user_stats.balls_bowled + $6,
-                        runs_conceded = user_stats.runs_conceded + $7,
-                        fours = user_stats.fours + $8,
-                        sixes = user_stats.sixes + $9,
-                        centuries = user_stats.centuries + $10,
-                        fifties = user_stats.fifties + $11,
-                        ducks = user_stats.ducks + $12
-                    """,
-                    uid, is_out, runs, wickets, b_faced, b_bowled,
-                    r_conceded, fours, sixes, is_100, is_50, is_duck,
+            existing = await db.db["user_stats"].find_one({"user_id": uid})
+            if existing:
+                await db.db["user_stats"].update_one(
+                    {"user_id": uid},
+                    {"$inc": {
+                        "matches": 1, "losses": is_out, "runs": runs, "wickets": wickets,
+                        "balls_faced": b_faced, "balls_bowled": b_bowled, "runs_conceded": r_conceded,
+                        "fours": fours, "sixes": sixes, "centuries": is_100, "fifties": is_50, "ducks": is_duck,
+                    }, "$max": {"highest_score": runs},
+                    "$set": {"last_played_at": datetime.utcnow()}}
                 )
+            else:
+                await db.db["user_stats"].insert_one({
+                    "user_id": uid,
+                    "matches": 1, "wins": 0, "losses": is_out, "runs": runs, "wickets": wickets,
+                    "balls_faced": b_faced, "balls_bowled": b_bowled, "runs_conceded": r_conceded,
+                    "fours": fours, "sixes": sixes, "moms": 0, "centuries": is_100, "fifties": is_50, "ducks": is_duck,
+                    "highest_score": runs, "last_played_at": datetime.utcnow(),
+                })
 
-            top_scorer_id = max(stats.items(), key=lambda x: x[1].get("runs", 0), default=(None, {}))[0]
-            for uid, p in stats.items():
-                form_char = 'W' if uid == top_scorer_id else 'L'
-                await conn.execute(
-                    """
-                    UPDATE user_stats
-                    SET recent_form = LEFT($1 || COALESCE(recent_form, ''), 5),
-                        last_played_at = NOW()
-                    WHERE user_id = $2
-                    """,
-                    form_char, uid
+        top_scorer_id = max(stats.items(), key=lambda x: x[1].get("runs", 0), default=(None, {}))[0]
+        for uid, p in stats.items():
+            form_char = "W" if uid == top_scorer_id else "L"
+            existing = await db.db["user_stats"].find_one({"user_id": uid})
+            if existing:
+                old_form = existing.get("recent_form", "") or ""
+                new_form = (form_char + old_form)[:5]
+                await db.db["user_stats"].update_one(
+                    {"user_id": uid}, {"$set": {"recent_form": new_form}}
                 )
     except Exception as e:
         print(f"Solo stats save error: {e}")

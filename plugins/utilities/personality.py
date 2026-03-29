@@ -88,8 +88,7 @@ async def personality_cmd(client, message):
     user = message.from_user
     uid = user.id
 
-    async with db.pool.acquire() as conn:
-        stats = await conn.fetchrow("SELECT * FROM user_stats WHERE user_id=$1", uid)
+    stats = await db.db["user_stats"].find_one({"user_id": uid})
 
     if not stats:
         dna = "Lucky Charm 🍀"

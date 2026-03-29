@@ -10,9 +10,8 @@ VOTE_TIMEOUT = 120
 async def sync_captain_to_db(game_id, team, new_captain_id):
     try:
         from database.connection import db
-        async with db.pool.acquire() as conn:
-            await conn.execute("UPDATE game_players SET is_captain = FALSE WHERE game_id = $1 AND team = $2", game_id, team)
-            await conn.execute("UPDATE game_players SET is_captain = TRUE WHERE game_id = $1 AND user_id = $2", game_id, new_captain_id)
+        await db.db["game_players"].update_many({"game_id": game_id, "team": team}, {"$set": {"is_captain": False}})
+        await db.db["game_players"].update_one({"game_id": game_id, "user_id": new_captain_id}, {"$set": {"is_captain": True}})
     except Exception as e:
         print(f"❌ DB Captain Sync Error: {e}")
         
@@ -156,11 +155,7 @@ async def claim_host(client, query):
 
     try:
         from database.connection import db
-        async with db.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE games SET host_id = $1 WHERE game_id = $2", 
-                user.id, match["game_id"]
-            )
+        await db.db["games"].update_one({"game_id": match["game_id"]}, {"$set": {"host_id": user.id}})
     except Exception as e:
         print("❌ Host DB sync failed:", e)
 

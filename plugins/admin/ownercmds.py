@@ -73,24 +73,24 @@ async def reset_stats_confirm(client, query):
     user_id = int(payload)
     await query.answer("Resetting…")
     try:
-        async with db.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE user_stats SET
-                    matches=0, wins=0, losses=0, runs=0, balls_faced=0,
-                    highest_score=0, fours=0, sixes=0, centuries=0, fifties=0,
-                    ducks=0, wickets=0, balls_bowled=0, runs_conceded=0,
-                    hat_tricks=0, moms=0, best_partnership=0, penalties_received=0,
-                    recent_form='', last_played_at=NULL
-                WHERE user_id=$1
-                """,
-                user_id,
-            )
-            await conn.execute(
-                "UPDATE duel_stats SET wins=0, losses=0, matches=0, "
-                "runs=0, wickets=0, highest_score=0, ducks=0 WHERE user_id=$1",
-                user_id,
-            )
+        await db.db["user_stats"].update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "matches": 0, "wins": 0, "losses": 0, "runs": 0,
+                "balls_faced": 0, "highest_score": 0, "fours": 0,
+                "sixes": 0, "centuries": 0, "fifties": 0, "ducks": 0,
+                "wickets": 0, "balls_bowled": 0, "runs_conceded": 0,
+                "hat_tricks": 0, "moms": 0, "best_partnership": 0,
+                "penalties_received": 0, "recent_form": "", "last_played_at": None,
+            }}
+        )
+        await db.db["duel_stats"].update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "wins": 0, "losses": 0, "matches": 0,
+                "runs": 0, "wickets": 0, "highest_score": 0, "ducks": 0,
+            }}
+        )
         await query.message.edit_text(
             f"✅ <b>Stats reset</b> for user <code>{user_id}</code>.\n"
             f"Duel stats also cleared.",
@@ -142,12 +142,11 @@ async def edit_stat_cmd(client, message):
         return await message.reply_text("❌ Value must be a whole number.")
 
     try:
-        async with db.acquire() as conn:
-            result = await conn.execute(
-                f"UPDATE user_stats SET {field}=$1 WHERE user_id=$2",
-                value, target.id,
-            )
-        if result == "UPDATE 0":
+        result = await db.db["user_stats"].update_one(
+            {"user_id": target.id},
+            {"$set": {field: value}}
+        )
+        if result.matched_count == 0:
             return await message.reply_text(
                 f"⚠️ No stats row found for <code>{target.id}</code>. "
                 "They need to play at least one match first.",
@@ -166,24 +165,30 @@ async def edit_stat_cmd(client, message):
 async def bot_stats_cmd(client, message):
     wait = await message.reply_text("📊 Fetching stats…")
     try:
-        async with db.acquire() as conn:
-            total_users = await conn.fetchval("SELECT COUNT(*) FROM user_stats")
-            total_matches = await conn.fetchval("SELECT COUNT(*) FROM games")
-            active_matches = await conn.fetchval("SELECT COUNT(*) FROM games WHERE status='active'")
-            total_runs = await conn.fetchval("SELECT COALESCE(SUM(runs), 0) FROM user_stats")
-            total_wickets = await conn.fetchval("SELECT COALESCE(SUM(wickets), 0) FROM user_stats")
-            top_batter = await conn.fetchrow(
-                "SELECT first_name, runs FROM user_stats ORDER BY runs DESC LIMIT 1"
-            )
-            top_bowler = await conn.fetchrow(
-                "SELECT first_name, wickets FROM user_stats ORDER BY wickets DESC LIMIT 1"
-            )
-            duel_count = await conn.fetchval("SELECT COUNT(*) FROM duel_stats")
+        total_users = await db.db["user_stats"].count_documents({})
+        total_matches = await db.db["games"].count_documents({})
+        active_matches = await db.db["games"].count_documents({"status": "active"})
+        duel_count = await db.db["duel_stats"].count_documents({})
 
-        tb_name = html.escape(top_batter["first_name"] or "—") if top_batter else "—"
-        tb_runs = top_batter["runs"] if top_batter else 0
-        twk_name = html.escape(top_bowler["first_name"] or "—") if top_bowler else "—"
-        twk_wkts = top_bowler["wickets"] if top_bowler else 0
+        pipeline_runs = [{"$group": {"_id": None, "total": {"$sum": "$runs"}}}]
+        pipeline_wkts = [{"$group": {"_id": None, "total": {"$sum": "$wickets"}}}]
+
+        runs_res = await db.db["user_stats"].aggregate(pipeline_runs).to_list(1)
+        wkts_res = await db.db["user_stats"].aggregate(pipeline_wkts).to_list(1)
+        total_runs = runs_res[0]["total"] if runs_res else 0
+        total_wickets = wkts_res[0]["total"] if wkts_res else 0
+
+        top_batter = await db.db["user_stats"].find_one(
+            {}, {"first_name": 1, "runs": 1}, sort=[("runs", -1)]
+        )
+        top_bowler = await db.db["user_stats"].find_one(
+            {}, {"first_name": 1, "wickets": 1}, sort=[("wickets", -1)]
+        )
+
+        tb_name = html.escape(top_batter.get("first_name") or "—") if top_batter else "—"
+        tb_runs = top_batter.get("runs", 0) if top_batter else 0
+        twk_name = html.escape(top_bowler.get("first_name") or "—") if top_bowler else "—"
+        twk_wkts = top_bowler.get("wickets", 0) if top_bowler else 0
 
         text = (
             "📊 <b>BOT STATISTICS</b>\n"
@@ -213,11 +218,11 @@ async def broadcast_cmd(client, message):
 
     wait = await message.reply_text("📡 Broadcasting…")
     try:
-        async with db.acquire() as conn:
-            chat_ids = await conn.fetch("SELECT DISTINCT chat_id FROM games")
+        cursor = db.db["games"].find({}, {"chat_id": 1})
+        rows = await cursor.to_list(length=10000)
+        unique_chats = {row["chat_id"] for row in rows}
 
         sent, failed = 0, 0
-        unique_chats = {row["chat_id"] for row in chat_ids}
         for cid in unique_chats:
             try:
                 await message.reply_to_message.forward(cid)
@@ -252,11 +257,11 @@ async def give_mom_cmd(client, message):
         return await message.reply_text("❌ User not found.")
 
     try:
-        async with db.acquire() as conn:
-            await conn.execute(
-                "UPDATE user_stats SET moms = COALESCE(moms,0) + 1 WHERE user_id=$1",
-                target.id,
-            )
+        await db.db["user_stats"].update_one(
+            {"user_id": target.id},
+            {"$inc": {"moms": 1}},
+            upsert=True,
+        )
         await message.reply_text(
             f"🏅 <b>Man of the Match</b> awarded to "
             f"<a href='tg://user?id={target.id}'>{html.escape(target.first_name)}</a>!",

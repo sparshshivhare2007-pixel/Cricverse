@@ -38,8 +38,12 @@ MEMBERS_THUMB_COUNTER = {}
 AVATAR_CACHE = {}
 CACHE_TTL = 600
 
-async def ensure_user_exists(conn, user):
-    await conn.execute("INSERT INTO users (user_id, name) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING", user.id, user.first_name or "Player")
+async def ensure_user_exists(user):
+    await db.db["users"].update_one(
+        {"user_id": user.id},
+        {"$setOnInsert": {"user_id": user.id, "name": user.first_name or "Player", "coins": 1000, "games_played": 0, "notify_enabled": True}},
+        upsert=True
+    )
 
 def generate_members_thumbnail(cap_a_name: str, cap_b_name: str, cap_a_avatar_path: str, cap_b_avatar_path: str, group_name: str):
     base = Image.open(MEMBERS_THUMB).convert("RGBA")
@@ -268,29 +272,26 @@ async def join_team_logic(client, message):
 
     async def process_db_join():
         try:
-            async with db.pool.acquire() as conn:
-                active_game = await conn.fetchrow(
-                    "SELECT g.chat_id, g.title FROM game_players gp JOIN games g ON gp.game_id = g.game_id WHERE gp.user_id = $1 AND g.status = 'active' AND g.chat_id != $2",
-                    user.id, chat_id
-                )
+            active_gp = await db.db["game_players"].find_one({"user_id": user.id})
+            active_game = None
+            if active_gp:
+                g = await db.db["games"].find_one({"game_id": active_gp["game_id"], "status": "active", "chat_id": {"$ne": chat_id}})
+                active_game = g
 
-                if active_game:
-                    match["teams"][target_team]["players"].remove(user.id)
-                    group_title = active_game["title"] or "another group"
-                    await client.send_message(
-                        chat_id,
-                        f"🛑 <b>Wait {user.first_name}!</b> You're already playing in <b>{group_title}</b>.\nI have removed you from this match.",
-                        parse_mode=ParseMode.HTML
-                    )
-                    return
-
-                await ensure_user_exists(conn, user)
-                await conn.execute(
-                    "INSERT INTO game_players (game_id, user_id, team) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-                    match["game_id"],
-                    user.id,
-                    target_team
+            if active_game:
+                match["teams"][target_team]["players"].remove(user.id)
+                group_title = active_game.get("title") or "another group"
+                await client.send_message(
+                    chat_id,
+                    f"🛑 <b>Wait {user.first_name}!</b> You're already playing in <b>{group_title}</b>.\nI have removed you from this match.",
+                    parse_mode=ParseMode.HTML
                 )
+                return
+
+            await ensure_user_exists(user)
+            existing = await db.db["game_players"].find_one({"game_id": match["game_id"], "user_id": user.id})
+            if not existing:
+                await db.db["game_players"].insert_one({"game_id": match["game_id"], "user_id": user.id, "team": target_team})
         except Exception as e:
             print(f"Background Join Error: {e}")
 
@@ -661,68 +662,58 @@ async def add_player(client, message):
     success_list = []
     failed_details = []
 
-    async with db.pool.acquire() as conn:
-        for target in targets:
-            try:
+    for target in targets:
+        try:
 
-                if isinstance(target, str):
-                    failed_details.append(f"• <code>{target}</code> — invalid user")
-                    continue
+            if isinstance(target, str):
+                failed_details.append(f"• <code>{target}</code> — invalid user")
+                continue
 
-                other = await user_in_other_game(target.id, chat_id)
-                if other:
-                    failed_details.append(
-                        f"• {target.first_name} — already in another match"
-                    )
-                    continue
-
-                exists = await conn.fetchval(
-                    "SELECT 1 FROM game_players WHERE game_id=$1 AND user_id=$2",
-                    game_id,
-                    target.id
-                )
-
-                if exists:
-                    failed_details.append(
-                        f"• {target.first_name} — already added"
-                    )
-                    continue
-
-                await ensure_user_exists(conn, target)
-
-                await conn.execute(
-                    "INSERT INTO game_players (game_id, user_id, team) VALUES ($1, $2, $3)",
-                    game_id,
-                    target.id,
-                    team
-                )
-
-                if target.id not in match["teams"][team]["players"]:
-                    match["teams"][team]["players"].append(target.id)
-
-                match["players"].setdefault(target.id, {
-                    "runs": 0,
-                    "balls_faced": 0,
-                    "wickets": 0,
-                    "runs_conceded": 0,
-                    "balls_bowled": 0,
-                    "bowling_balls": [],
-                    "team": team,
-                    "is_out": False,
-                    "sixes_count": 0,
-                    "fours_count": 0,
-                    "late_join": True if match.get("started") else False
-                })
-
-                match["user_cache"][target.id] = target.first_name or "Player"
-
-                success_list.append(target.mention)
-
-            except Exception as e:
-                print("ADD PLAYER ERROR:", e)
+            other = await user_in_other_game(target.id, chat_id)
+            if other:
                 failed_details.append(
-                    f"• {target.first_name if hasattr(target, 'first_name') else target} — failed"
+                    f"• {target.first_name} — already in another match"
                 )
+                continue
+
+            exists = await db.db["game_players"].find_one({"game_id": game_id, "user_id": target.id})
+
+            if exists:
+                failed_details.append(
+                    f"• {target.first_name} — already added"
+                )
+                continue
+
+            await ensure_user_exists(target)
+
+            await db.db["game_players"].insert_one({"game_id": game_id, "user_id": target.id, "team": team})
+
+            if target.id not in match["teams"][team]["players"]:
+                match["teams"][team]["players"].append(target.id)
+
+            match["players"].setdefault(target.id, {
+                "runs": 0,
+                "balls_faced": 0,
+                "wickets": 0,
+                "runs_conceded": 0,
+                "balls_bowled": 0,
+                "bowling_balls": [],
+                "team": team,
+                "is_out": False,
+                "sixes_count": 0,
+                "fours_count": 0,
+                "late_join": True if match.get("started") else False
+            })
+
+            match["user_cache"][target.id] = target.first_name or "Player"
+
+            success_list.append(target.mention)
+
+        except Exception as e:
+            print("ADD PLAYER ERROR:", e)
+            failed_details.append(
+                f"• {target.first_name if hasattr(target, 'first_name') else target} — failed"
+            )
 
     if len(success_list) == 1 and len(targets) == 1:
         return await message.reply_text(
@@ -769,11 +760,9 @@ async def remove_player(client, message):
         if target.id in active_on_field:
             return await message.reply_text("🚫 Easy there, chief.\nThat player is **in action right now** 🏏\n\nWait for the over to finish or for the batter to walk back.", parse_mode=ParseMode.HTML)
 
-    async with db.pool.acquire() as conn:
-        exists = await conn.fetchval("SELECT 1 FROM game_players WHERE game_id=$1 AND user_id=$2", game_id, target.id)
-        if not exists: return await message.reply_text("👀 That player isn’t even part of this match.\nWrong universe?", parse_mode=ParseMode.HTML)
-        await conn.execute("DELETE FROM game_players WHERE game_id=$1 AND user_id=$2", game_id, target.id)
-
+    exists = await db.db["game_players"].find_one({"game_id": game_id, "user_id": target.id})
+    if not exists: return await message.reply_text("👀 That player isn't even part of this match.\nWrong universe?", parse_mode=ParseMode.HTML)
+    await db.db["game_players"].delete_one({"game_id": game_id, "user_id": target.id})
     if match:
         for team_key in ["A", "B"]:
             if target.id in match["teams"][team_key]["players"]: match["teams"][team_key]["players"].remove(target.id)
@@ -799,14 +788,12 @@ async def shift_team(client, message):
     shifts_used = await get_shift_count(game_id, user.id)
     if shifts_used >= 2: return await message.reply_text("🚫 Shift limit reached.\nYou’ve already used **2/2** team switches.\nNo more musical chairs 🎶", parse_mode=ParseMode.HTML)
 
-    async with db.pool.acquire() as conn:
-        player = await conn.fetchrow("SELECT team FROM game_players WHERE game_id=$1 AND user_id=$2", game_id, user.id)
-        if not player: return await message.reply_text("👀 You’re not even in this match yet.\nJoin a team first, then we’ll talk.", parse_mode=ParseMode.HTML)
+    player = await db.db["game_players"].find_one({"game_id": game_id, "user_id": user.id})
+    if not player: return await message.reply_text("👀 You're not even in this match yet.\nJoin a team first, then we'll talk.", parse_mode=ParseMode.HTML)
 
-        current = player["team"]
-        new_team = "B" if current == "A" else "A"
-        await conn.execute("UPDATE game_players SET team=$1 WHERE game_id=$2 AND user_id=$3", new_team, game_id, user.id)
-
+    current = player["team"]
+    new_team = "B" if current == "A" else "A"
+    await db.db["game_players"].update_one({"game_id": game_id, "user_id": user.id}, {"$set": {"team": new_team}})
     if match:
         if user.id in match["teams"][current]["players"]: match["teams"][current]["players"].remove(user.id)
         if user.id not in match["teams"][new_team]["players"]: match["teams"][new_team]["players"].append(user.id)

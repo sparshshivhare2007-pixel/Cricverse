@@ -79,18 +79,11 @@ async def stats_cmd(client, message):
             groups = 0
 
         try:
-            async with db.pool.acquire() as conn:
-                games_today = await conn.fetchval(
-                    "SELECT COUNT(*) FROM games WHERE created_at::date = CURRENT_DATE"
-                ) or 0
-
-                games_total = await conn.fetchval(
-                    "SELECT COUNT(*) FROM games"
-                ) or 0
-
-                active_games = await conn.fetchval(
-                    "SELECT COUNT(*) FROM games WHERE status = 'active'"
-                ) or 0
+            from datetime import datetime, timezone
+            today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            games_today = await db.db["games"].count_documents({"created_at": {"$gte": today_start}})
+            games_total = await db.db["games"].count_documents({})
+            active_games = await db.db["games"].count_documents({"status": "active"})
         except Exception:
             pass
 

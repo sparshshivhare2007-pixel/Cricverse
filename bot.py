@@ -12,7 +12,7 @@ LOG_CHANNEL = -1003692127639
 async def _db_watchdog():
     while True:
         await asyncio.sleep(15)
-        if not db.pool:
+        if not db.client:
             print("🔌 DB watchdog: pool is gone, reconnecting…")
             await db.connect(retries=5, delay=3.0)
 

@@ -316,92 +316,78 @@ async def save_match_stats(match, winner_team):
             max_points = points
             motm_id = uid
 
-    async with db.pool.acquire() as conn:
-        async with conn.transaction():
-            team_a = match["teams"].get("A", {"runs": 0, "wickets": 0})
-            team_b = match["teams"].get("B", {"runs": 0, "wickets": 0})
+    team_a = match["teams"].get("A", {"runs": 0, "wickets": 0})
+    team_b = match["teams"].get("B", {"runs": 0, "wickets": 0})
 
-            await conn.execute(
-                """
-                UPDATE games 
-                SET status='finished', winner=$1, team_a_runs=$2, team_b_runs=$3, 
-                    team_a_wickets=$4, team_b_wickets=$5
-                WHERE game_id=$6
-                """,
-                winner_team, team_a.get("runs", 0), team_b.get("runs", 0),
-                team_a.get("wickets", 0), team_b.get("wickets", 0), game_id
+    await db.db["games"].update_one(
+        {"game_id": game_id},
+        {"$set": {
+            "status": "finished",
+            "winner": winner_team,
+            "team_a_runs": team_a.get("runs", 0),
+            "team_b_runs": team_b.get("runs", 0),
+            "team_a_wickets": team_a.get("wickets", 0),
+            "team_b_wickets": team_b.get("wickets", 0),
+        }}
+    )
+
+    from datetime import datetime
+    for uid, p in players.items():
+        is_winner = 1 if p.get("team") == winner_team else 0
+        is_loser = 1 if (winner_team not in ["Tie", "No Result", None] and p.get("team") != winner_team) else 0
+        is_mom = 1 if uid == motm_id else 0
+
+        runs = p.get("runs", 0)
+        wickets = p.get("wickets", 0)
+        fours = p.get("fours_count", 0)
+        sixes = p.get("sixes_count", 0)
+        b_faced = p.get("balls_faced", 0)
+        b_bowled = p.get("balls_bowled", 0)
+        r_conceded = p.get("runs_conceded", 0)
+
+        is_50 = 1 if 50 <= runs < 100 else 0
+        is_100 = 1 if runs >= 100 else 0
+        is_duck = 1 if runs == 0 and p.get("is_out") else 0
+
+        form_char = "W" if p.get("team") == winner_team else "L"
+
+        existing = await db.db["user_stats"].find_one({"user_id": uid})
+        if existing:
+            old_form = existing.get("recent_form", "") or ""
+            new_form = (form_char + old_form)[:5]
+            old_hs = existing.get("highest_score", 0) or 0
+            await db.db["user_stats"].update_one(
+                {"user_id": uid},
+                {"$inc": {
+                    "matches": 1, "wins": is_winner, "losses": is_loser,
+                    "runs": runs, "wickets": wickets, "balls_faced": b_faced,
+                    "balls_bowled": b_bowled, "runs_conceded": r_conceded,
+                    "fours": fours, "sixes": sixes, "moms": is_mom,
+                    "centuries": is_100, "fifties": is_50, "ducks": is_duck,
+                }, "$max": {
+                    "highest_score": runs,
+                }, "$set": {
+                    "recent_form": new_form,
+                    "last_played_at": datetime.utcnow(),
+                }}
             )
+        else:
+            await db.db["user_stats"].insert_one({
+                "user_id": uid,
+                "matches": 1, "wins": is_winner, "losses": is_loser,
+                "runs": runs, "wickets": wickets, "balls_faced": b_faced,
+                "balls_bowled": b_bowled, "runs_conceded": r_conceded,
+                "fours": fours, "sixes": sixes, "moms": is_mom,
+                "centuries": is_100, "fifties": is_50, "ducks": is_duck,
+                "highest_score": runs, "recent_form": form_char,
+                "last_played_at": datetime.utcnow(),
+            })
 
-            for uid, p in players.items():
-                is_winner = 1 if p.get("team") == winner_team else 0
-                is_loser = 1 if (winner_team not in ["Tie", "No Result", None] and p.get("team") != winner_team) else 0
-                is_mom = 1 if uid == motm_id else 0
-
-                runs = p.get("runs", 0)
-                wickets = p.get("wickets", 0)
-                fours = p.get("fours_count", 0)
-                sixes = p.get("sixes_count", 0)
-                b_faced = p.get("balls_faced", 0)
-                b_bowled = p.get("balls_bowled", 0)
-                r_conceded = p.get("runs_conceded", 0)
-
-                is_50 = 1 if 50 <= runs < 100 else 0
-                is_100 = 1 if runs >= 100 else 0
-                is_duck = 1 if runs == 0 and p.get("is_out") else 0
-
-                await conn.execute(
-                    """
-                    INSERT INTO user_stats (
-                        user_id, matches, wins, losses, runs, wickets, 
-                        balls_faced, balls_bowled, runs_conceded, fours, sixes,
-                        moms, centuries, fifties, ducks
-                    )
-                    VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-                    ON CONFLICT (user_id) DO UPDATE SET
-                        matches = user_stats.matches + 1,
-                        wins = user_stats.wins + $2,
-                        losses = user_stats.losses + $3,
-                        runs = user_stats.runs + $4,
-                        wickets = user_stats.wickets + $5,
-                        balls_faced = user_stats.balls_faced + $6,
-                        balls_bowled = user_stats.balls_bowled + $7,
-                        runs_conceded = user_stats.runs_conceded + $8,
-                        fours = user_stats.fours + $9,
-                        sixes = user_stats.sixes + $10,
-                        moms = user_stats.moms + $11,
-                        centuries = user_stats.centuries + $12,
-                        fifties = user_stats.fifties + $13,
-                        ducks = user_stats.ducks + $14
-                    """,
-                    uid, is_winner, is_loser, runs, wickets, b_faced, b_bowled, 
-                    r_conceded, fours, sixes, is_mom, is_100, is_50, is_duck
-                )
-
-                await conn.execute(
-                    "UPDATE user_stats SET highest_score = GREATEST(highest_score, $1) WHERE user_id = $2",
-                    runs, uid
-                )
-
-            partnership_runs = match.get("best_partnership_this_match", match.get("partnership", 0))
-            all_uids = list(players.keys())
-
-            for pid in all_uids:
-                if pid:
-                    await conn.execute(
-                        "UPDATE user_stats SET best_partnership = GREATEST(best_partnership, $1) WHERE user_id = $2",
-                        partnership_runs, pid
-                    )
-
-            for uid, p in players.items():
-                form_char = 'W' if p.get("team") == winner_team else 'L'
-                await conn.execute(
-                    """
-                    UPDATE user_stats
-                    SET recent_form = LEFT($1 || COALESCE(recent_form, ''), 5),
-                        last_played_at = NOW()
-                    WHERE user_id = $2
-                    """,
-                    form_char, uid
-                )
-
+    partnership_runs = match.get("best_partnership_this_match", match.get("partnership", 0))
+    for pid in list(players.keys()):
+        if pid:
+            await db.db["user_stats"].update_one(
+                {"user_id": pid},
+                {"$max": {"best_partnership": partnership_runs}}
+            )
     print(f"✅ Match {game_id} full stats and milestones saved.")

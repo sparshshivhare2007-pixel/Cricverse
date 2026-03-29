@@ -33,11 +33,11 @@ def _fresh_player_stats():
     }
 
 
-async def _ensure_user_exists(conn, user):
-    await conn.execute(
-        "INSERT INTO users (user_id, name) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING",
-        user.id,
-        user.first_name or "Player",
+async def _ensure_user_exists(user):
+    await db.db["users"].update_one(
+        {"user_id": user.id},
+        {"$setOnInsert": {"user_id": user.id, "name": user.first_name or "Player", "coins": 1000, "games_played": 0, "notify_enabled": True}},
+        upsert=True
     )
 
 
@@ -130,18 +130,16 @@ async def solo_mode_selected(client, query):
 
 async def _create_solo_game_db(game_id, chat_id, group_title, user):
     try:
-        async with db.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO games (game_id, chat_id, title, mode, host_id, status, phase) "
-                "VALUES ($1, $2, $3, $4, $5, 'active', 'SOLO_JOIN')",
-                game_id, chat_id, group_title, "solo", user.id,
-            )
-            await _ensure_user_exists(conn, user)
-            await conn.execute(
-                "INSERT INTO game_players (game_id, user_id, team) "
-                "VALUES ($1, $2, 'S') ON CONFLICT DO NOTHING",
-                game_id, user.id,
-            )
+        existing_game = await db.db["games"].find_one({"game_id": game_id})
+        if not existing_game:
+            await db.db["games"].insert_one({
+                "game_id": game_id, "chat_id": chat_id, "title": group_title,
+                "mode": "solo", "host_id": user.id, "status": "active", "phase": "SOLO_JOIN",
+            })
+        await _ensure_user_exists(user)
+        existing_gp = await db.db["game_players"].find_one({"game_id": game_id, "user_id": user.id})
+        if not existing_gp:
+            await db.db["game_players"].insert_one({"game_id": game_id, "user_id": user.id, "team": "S"})
     except Exception as e:
         print(f"Solo game DB create (bg) error: {e}")
 
@@ -186,13 +184,10 @@ async def join_solo_game(client, message):
 
 async def _join_solo_game_db(game_id, user):
     try:
-        async with db.acquire() as conn:
-            await _ensure_user_exists(conn, user)
-            await conn.execute(
-                "INSERT INTO game_players (game_id, user_id, team) "
-                "VALUES ($1, $2, 'S') ON CONFLICT DO NOTHING",
-                game_id, user.id,
-            )
+        await _ensure_user_exists(user)
+        existing = await db.db["game_players"].find_one({"game_id": game_id, "user_id": user.id})
+        if not existing:
+            await db.db["game_players"].insert_one({"game_id": game_id, "user_id": user.id, "team": "S"})
     except Exception as e:
         print(f"Solo join DB (bg) error: {e}")
 
@@ -228,11 +223,7 @@ async def leave_solo_game(client, message):
 
 async def _leave_solo_game_db(game_id, user_id):
     try:
-        async with db.acquire() as conn:
-            await conn.execute(
-                "DELETE FROM game_players WHERE game_id=$1 AND user_id=$2",
-                game_id, user_id,
-            )
+        await db.db["game_players"].delete_one({"game_id": game_id, "user_id": user_id})
     except Exception as e:
         print(f"Solo leave DB (bg) error: {e}")
 
@@ -447,10 +438,6 @@ async def start_solo_game(client, chat_id):
 
 async def _update_game_phase_db(chat_id, phase):
     try:
-        async with db.acquire() as conn:
-            await conn.execute(
-                "UPDATE games SET phase=$1 WHERE chat_id=$2 AND status='active'",
-                phase, chat_id,
-            )
+        await db.db["games"].update_one({"chat_id": chat_id, "status": "active"}, {"$set": {"phase": phase}})
     except Exception as e:
         print(f"Solo phase DB update error: {e}")

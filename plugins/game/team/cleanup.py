@@ -80,8 +80,7 @@ async def auto_clean_matches(client):
 
             if game_id:
                 try:
-                    async with db.pool.acquire() as conn:
-                        await conn.execute("UPDATE games SET status='ended' WHERE game_id=$1", game_id)
+                    await db.db["games"].update_one({"game_id": game_id}, {"$set": {"status": "ended"}})
                 except Exception as e:
                     print("❌ GC DB Cleanup Error:", e)
                     

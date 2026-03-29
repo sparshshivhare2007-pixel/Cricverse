@@ -27,29 +27,34 @@ async def _run_nudge_loop(client: Client):
 
 async def _send_nudges(client: Client):
     try:
-        await db.ensure_pool()
-        async with db.pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT us.user_id, us.first_name, 
-                       EXTRACT(EPOCH FROM (NOW() - us.last_played_at)) / 86400 AS days_inactive
-                FROM user_stats us
-                JOIN users u ON us.user_id = u.user_id
-                WHERE us.last_played_at IS NOT NULL
-                  AND us.last_played_at < NOW() - INTERVAL '3 days'
-                  AND us.matches > 0
-                  AND COALESCE(u.notify_enabled, TRUE) = TRUE
-                LIMIT 50
-                """
-            )
+        from datetime import datetime, timedelta
+        cutoff = datetime.utcnow() - timedelta(days=INACTIVITY_DAYS)
+        rows = await db.db["user_stats"].find(
+            {
+                "last_played_at": {"$lt": cutoff, "$ne": None},
+                "matches": {"$gt": 0},
+            },
+            {"user_id": 1, "first_name": 1, "last_played_at": 1}
+        ).limit(50).to_list(None)
+
+        notify_off = set()
+        user_docs = await db.db["users"].find(
+            {"notify_enabled": False}, {"user_id": 1}
+        ).to_list(None)
+        for u in user_docs:
+            notify_off.add(u["user_id"])
+
+        rows = [r for r in rows if r.get("user_id") not in notify_off]
     except Exception as e:
         print(f"Nudge DB fetch error: {e}")
         return
 
     sent = 0
     for row in rows:
+        from datetime import datetime
+        lp = row.get("last_played_at")
+        days = (datetime.utcnow() - lp).days if lp else INACTIVITY_DAYS
         uid = row["user_id"]
-        days = int(row.get("days_inactive", INACTIVITY_DAYS))
         name = row.get("first_name") or "Captain"
 
         msg = random.choice(NUDGE_MESSAGES).format(days=days, name=name)

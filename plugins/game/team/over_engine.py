@@ -285,37 +285,22 @@ async def update_game_in_db(match):
         team_a = teams.get("A", {"runs": 0, "wickets": 0, "balls": 0})
         team_b = teams.get("B", {"runs": 0, "wickets": 0, "balls": 0})
 
-        async with db.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE games 
-                SET team_a_runs = $1, 
-                    team_b_runs = $2, 
-                    team_a_wickets = $3, 
-                    team_b_wickets = $4, 
-                    phase = $5, 
-                    batting_team = $6, 
-                    bowling_team = $7,
-                    target = $8,
-                    innings = $9,
-                    team_a_balls = $10,
-                    team_b_balls = $11
-                WHERE game_id = $12
-                """,
-                team_a.get("runs", 0), 
-                team_b.get("runs", 0),
-                team_a.get("wickets", 0), 
-                team_b.get("wickets", 0),
-                match.get("phase", "LIVE"), 
-                match.get("batting_team", "A"), 
-                match.get("bowling_team", "B"),
-                match.get("target"),       
-                match.get("innings", 1),  
-                team_a.get("balls", 0), 
-                team_b.get("balls", 0), 
-                game_id
-            )
-
+        await db.db["games"].update_one(
+            {"game_id": match.get("game_id")},
+            {"$set": {
+                "team_a_runs": team_a.get("runs", 0),
+                "team_b_runs": team_b.get("runs", 0),
+                "team_a_wickets": team_a.get("wickets", 0),
+                "team_b_wickets": team_b.get("wickets", 0),
+                "phase": match.get("phase", "LIVE"),
+                "batting_team": match.get("batting_team", "A"),
+                "bowling_team": match.get("bowling_team", "B"),
+                "target": match.get("target"),
+                "innings": match.get("innings", 1),
+                "team_a_balls": team_a.get("balls", 0),
+                "team_b_balls": team_b.get("balls", 0),
+            }}
+        )
     except Exception as e:
         print(f"❌ DB Sync Error in game {match.get('game_id')}: {e}")
 
@@ -466,8 +451,7 @@ async def advance_ball(match, result):
 
             try:
                 from database.connection import db
-                async with db.pool.acquire() as conn:
-                    await conn.execute("UPDATE game_players SET role = NULL, is_out = TRUE WHERE game_id = $1 AND user_id = $2", match.get("game_id"), actual_striker)
+                await db.db["game_players"].update_one({"game_id": match.get("game_id"), "user_id": actual_striker}, {"$set": {"role": None, "is_out": True}})
             except Exception as e:
                 print("❌ DB role clear failed:", e)
 
@@ -655,23 +639,13 @@ async def end_over(match):
         match["non_striker"] = alive[0] if alive else None
 
     try:
-        async with db.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE game_players SET role = NULL WHERE game_id = $1",
-                match.get("game_id")
-            )
+        await db.db["game_players"].update_many({"game_id": match.get("game_id")}, {"$set": {"role": None}})
 
-            if match.get("striker"):
-                await conn.execute(
-                    "UPDATE game_players SET role = 'striker' WHERE game_id = $1 AND user_id = $2",
-                    match.get("game_id"), match["striker"]
-                )
+        if match.get("striker"):
+            await db.db["game_players"].update_one({"game_id": match.get("game_id"), "user_id": match["striker"]}, {"$set": {"role": "striker"}})
 
-            if match.get("non_striker"):
-                await conn.execute(
-                    "UPDATE game_players SET role = 'non_striker' WHERE game_id = $1 AND user_id = $2",
-                    match.get("game_id"), match["non_striker"]
-                )
+        if match.get("non_striker"):
+            await db.db["game_players"].update_one({"game_id": match.get("game_id"), "user_id": match["non_striker"]}, {"$set": {"role": "non_striker"}})
     except Exception as e:
         print("❌ Role sync error in end_over:", e)
 
@@ -815,16 +789,8 @@ async def end_innings(match):
         match["phase"] = "READY"
 
         from database.connection import db
-        async with db.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(
-                    "UPDATE game_players SET role = NULL WHERE game_id = $1",
-                    game_id
-                )
-                await conn.execute(
-                    "UPDATE game_players SET is_out = FALSE WHERE game_id = $1 AND team = $2",
-                    game_id, new_batting_team
-                )
+        await db.db["game_players"].update_many({"game_id": game_id}, {"$set": {"role": None}})
+        await db.db["game_players"].update_many({"game_id": game_id, "team": new_batting_team}, {"$set": {"is_out": False}})
 
         match.update({
             "partnership": 0,
@@ -993,12 +959,8 @@ async def end_match(match, forced: bool = False):
     ACTIVE_MATCHES.pop(chat_id, None)
 
     try:
-        from database.connection import db 
-        async with db.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE games SET status = 'ended' WHERE game_id = $1",
-                match.get("game_id")
-            )
+        from database.connection import db
+        await db.db["games"].update_one({"game_id": match.get("game_id")}, {"$set": {"status": "ended"}})
     except Exception as e:
         print("❌ DB update failed:", e)
 

@@ -9,7 +9,7 @@ A Telegram bot for cricket-based group games with a Flask web log dashboard.
 - **plugins/** - Modular bot plugins (game, admin, common, utilities)
   - **plugins/game/duel.py** - 1v1 DM-based duel mode with matchmaking queue
   - **plugins/utilities/nudge.py** - Inactivity nudge background task
-- **database/** - PostgreSQL database layer using asyncpg
+- **database/** - MongoDB database layer using motor (async)
 - **utils/** - Shared utility functions
 - **config.py** - Centralized configuration (API keys, DB URL, bot settings)
 - **Assets/** - Static resources (fonts, images for scorecards)
@@ -28,7 +28,7 @@ A Telegram bot for cricket-based group games with a Flask web log dashboard.
 
 - **Language:** Python 3.12
 - **Telegram Framework:** Pyrofork (Pyrogram fork)
-- **Database:** PostgreSQL (external Neon hosted) via asyncpg
+- **Database:** MongoDB Atlas via motor (async)
 - **Web Dashboard:** Flask + Gunicorn
 - **Image Processing:** Pillow, matplotlib
 
@@ -50,6 +50,7 @@ Deployed as a VM (always-running) deployment to keep the Telegram bot alive cont
 
 All configuration is in `config.py`:
 - `API_ID`, `API_HASH`, `BOT_TOKEN` - Telegram credentials
-- `DATABASE_URL` - PostgreSQL connection string (Neon)
+- `MONGO_URL` - MongoDB Atlas connection string
+- `asyncpg` - also installed for `/transfer` command (PostgreSQL → MongoDB data migration)
 - `OWNER_IDS` - Bot owner Telegram user IDs
 - `LOG_CHANNEL` - Telegram channel ID for startup logs

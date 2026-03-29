@@ -213,18 +213,28 @@ async def send_group_analysis(client, message):
     chat_id = message.chat.id
     title = message.chat.title or "This Group"
 
-    async with db.pool.acquire() as conn:
-        rows = await conn.fetch("SELECT EXTRACT(HOUR FROM created_at) AS hour, COUNT(*) AS count FROM games WHERE chat_id = $1 GROUP BY hour", chat_id)
-        total_matches = await conn.fetchval("SELECT COUNT(*) FROM games WHERE chat_id=$1", chat_id) or 0
-        ranks = await conn.fetch("SELECT g.chat_id, COUNT(*) + COUNT(DISTINCT gp.user_id) AS score FROM games g LEFT JOIN game_players gp ON gp.game_id = g.game_id GROUP BY g.chat_id ORDER BY score DESC")
+    pipeline_hours = [
+        {"$match": {"chat_id": chat_id}},
+        {"$project": {"hour": {"$hour": "$created_at"}}},
+        {"$group": {"_id": "$hour", "count": {"$sum": 1}}},
+    ]
+    hour_raw = await db.db["games"].aggregate(pipeline_hours).to_list(None)
+
+    total_matches = await db.db["games"].count_documents({"chat_id": chat_id})
+
+    pipeline_rank = [
+        {"$group": {"_id": "$chat_id", "game_count": {"$sum": 1}}},
+        {"$sort": {"game_count": -1}},
+    ]
+    ranks = await db.db["games"].aggregate(pipeline_rank).to_list(None)
 
     if total_matches < 3:
         return await loading.edit_text("😶 Not enough data yet.\nPlay a few matches to unlock analytics.", reply_markup=back_button())
 
-    hour_counts = {int(r["hour"]): r["count"] for r in rows}
-    peak_hour = max(hour_counts, key=hour_counts.get)
+    hour_counts = {int(r["_id"]): r["count"] for r in hour_raw if r["_id"] is not None}
+    peak_hour = max(hour_counts, key=hour_counts.get) if hour_counts else 0
 
-    rank = next((i + 1 for i, r in enumerate(ranks) if r["chat_id"] == chat_id), None)
+    rank = next((i + 1 for i, r in enumerate(ranks) if r["_id"] == chat_id), None)
     total_groups = len(ranks)
 
     graph = build_peak_time_graph(hour_counts=hour_counts, peak_hour=peak_hour, group_name=title)

@@ -41,11 +41,7 @@ async def fetch_dashboard(client, message):
         now = datetime.utcnow()
 
         users_total = await total_users()
-
-        async with db.pool.acquire() as conn:
-            users_7d = await conn.fetchval(
-                "SELECT COUNT(*) FROM user_stats" 
-            ) or 0
+        users_7d = await db.db["user_stats"].count_documents({})
 
         active_users = users_total
         inactive_users = 0
@@ -54,14 +50,9 @@ async def fetch_dashboard(client, message):
         active_groups = groups_total
         inactive_groups = 0
 
-        async with db.pool.acquire() as conn:
-            games_today = await conn.fetchval(
-                "SELECT COUNT(*) FROM games WHERE created_at::date = CURRENT_DATE"
-            ) or 0
-
-            games_total = await conn.fetchval(
-                "SELECT COUNT(*) FROM games"
-            ) or 0
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        games_today = await db.db["games"].count_documents({"created_at": {"$gte": today_start}})
+        games_total = await db.db["games"].count_documents({})
 
         db_status = "✅ Connected"
         bot_status = "✅ Running"
@@ -224,15 +215,16 @@ async def broad_cmd(client, message):
         return await message.reply_text("Nothing to broadcast 🤨")
 
     try:
-        async with db.pool.acquire() as conn:
-            user_rows = await conn.fetch("SELECT DISTINCT user_id FROM user_stats")
-            group_rows = await conn.fetch("SELECT DISTINCT chat_id FROM games")
+        user_cursor = db.db["user_stats"].find({}, {"user_id": 1})
+        user_rows = await user_cursor.to_list(length=100000)
+        group_cursor = db.db["games"].find({}, {"chat_id": 1})
+        group_rows = await group_cursor.to_list(length=100000)
     except Exception as e:
         print(e)
         return await message.reply_text("DB error.")
 
-    users = [u["user_id"] for u in user_rows]
-    groups = [g["chat_id"] for g in group_rows]
+    users = list({u["user_id"] for u in user_rows})
+    groups = list({g["chat_id"] for g in group_rows})
 
     if btype == "users":
         targets = users
@@ -490,98 +482,94 @@ async def dbtrans_cmd(client, message):
         except Exception:
             pass
 
-    async with db.pool.acquire() as conn:
-        for idx, record in enumerate(records):
-            try:
-                ts = record.get("total_stats", {})
-                uid = int(record.get("user_id", 0))
-                if not uid:
-                    skipped += 1
-                    continue
-
-                username = record.get("username") or None
-                first_name = record.get("first_name") or None
-
-                runs = int(ts.get("runs", 0))
-                wickets = int(ts.get("wickets", 0))
-                matches = int(ts.get("matches_played", 0))
-                balls_faced = int(ts.get("balls_faced", 0))
-                balls_bowled = int(ts.get("balls_bowled", 0))
-                runs_conceded = int(ts.get("runs_conceded", 0))
-                sixes = int(ts.get("sixes", 0))
-                fours = int(ts.get("fours", 0))
-                centuries = int(ts.get("centuries", 0))
-                fifties = int(ts.get("fifties", 0))
-                ducks = int(ts.get("ducks", 0))
-                hat_tricks = int(ts.get("hat_tricks", 0))
-
-                mom_data = ts.get("man_of_match", {})
-                moms = int(mom_data.get("total", 0)) if isinstance(mom_data, dict) else 0
-
-                hs_data = ts.get("highest_score", {})
-                highest_score = int(hs_data.get("runs", 0)) if isinstance(hs_data, dict) else int(hs_data or 0)
-
-                bp_data = ts.get("best_partnership", {})
-                if isinstance(bp_data, dict):
-                    best_partnership = int(bp_data.get("runs", 0))
-                else:
-                    best_partnership = int(bp_data or 0)
-
-                cap_data = ts.get("best_captain", {})
-                wins = int(cap_data.get("wins", 0)) if isinstance(cap_data, dict) else 0
-                losses = int(cap_data.get("losses", 0)) if isinstance(cap_data, dict) else 0
-
-                await conn.execute("""
-                    INSERT INTO user_stats (
-                        user_id, username, first_name,
-                        matches, wins, losses, runs, wickets,
-                        balls_faced, balls_bowled, runs_conceded,
-                        sixes, fours, centuries, fifties, ducks,
-                        hat_tricks, moms, highest_score, best_partnership
-                    )
-                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-                    ON CONFLICT (user_id) DO UPDATE SET
-                        username      = COALESCE(EXCLUDED.username, user_stats.username),
-                        first_name    = COALESCE(EXCLUDED.first_name, user_stats.first_name),
-                        matches       = user_stats.matches + $4,
-                        wins          = user_stats.wins + $5,
-                        losses        = user_stats.losses + $6,
-                        runs          = user_stats.runs + $7,
-                        wickets       = user_stats.wickets + $8,
-                        balls_faced   = user_stats.balls_faced + $9,
-                        balls_bowled  = user_stats.balls_bowled + $10,
-                        runs_conceded = user_stats.runs_conceded + $11,
-                        sixes         = user_stats.sixes + $12,
-                        fours         = user_stats.fours + $13,
-                        centuries     = user_stats.centuries + $14,
-                        fifties       = user_stats.fifties + $15,
-                        ducks         = user_stats.ducks + $16,
-                        hat_tricks    = user_stats.hat_tricks + $17,
-                        moms          = user_stats.moms + $18,
-                        highest_score = GREATEST(user_stats.highest_score, $19),
-                        best_partnership = GREATEST(user_stats.best_partnership, $20)
-                """,
-                    uid, username, first_name,
-                    matches, wins, losses, runs, wickets,
-                    balls_faced, balls_bowled, runs_conceded,
-                    sixes, fours, centuries, fifties, ducks,
-                    hat_tricks, moms, highest_score, best_partnership
-                )
-
-                await conn.execute(
-                    "INSERT INTO users (user_id, name) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING",
-                    uid, first_name or username or "Player"
-                )
-
-                added += 1
-
-            except Exception as e:
+    for idx, record in enumerate(records):
+        try:
+            ts = record.get("total_stats", {})
+            uid = int(record.get("user_id", 0))
+            if not uid:
                 skipped += 1
-                errors.append(f"uid={record.get('user_id','?')}: {str(e)[:60]}")
+                continue
 
-            if (idx + 1) % 3 == 0 or idx == total - 1:
-                await update_progress(idx)
-                await asyncio.sleep(0.1)
+            username = record.get("username") or None
+            first_name = record.get("first_name") or None
+
+            runs = int(ts.get("runs", 0))
+            wickets = int(ts.get("wickets", 0))
+            matches = int(ts.get("matches_played", 0))
+            balls_faced = int(ts.get("balls_faced", 0))
+            balls_bowled = int(ts.get("balls_bowled", 0))
+            runs_conceded = int(ts.get("runs_conceded", 0))
+            sixes = int(ts.get("sixes", 0))
+            fours = int(ts.get("fours", 0))
+            centuries = int(ts.get("centuries", 0))
+            fifties = int(ts.get("fifties", 0))
+            ducks = int(ts.get("ducks", 0))
+            hat_tricks = int(ts.get("hat_tricks", 0))
+
+            mom_data = ts.get("man_of_match", {})
+            moms = int(mom_data.get("total", 0)) if isinstance(mom_data, dict) else 0
+
+            hs_data = ts.get("highest_score", {})
+            highest_score = int(hs_data.get("runs", 0)) if isinstance(hs_data, dict) else int(hs_data or 0)
+
+            bp_data = ts.get("best_partnership", {})
+            if isinstance(bp_data, dict):
+                best_partnership = int(bp_data.get("runs", 0))
+            else:
+                best_partnership = int(bp_data or 0)
+
+            cap_data = ts.get("best_captain", {})
+            wins = int(cap_data.get("wins", 0)) if isinstance(cap_data, dict) else 0
+            losses = int(cap_data.get("losses", 0)) if isinstance(cap_data, dict) else 0
+
+            existing = await db.db["user_stats"].find_one({"user_id": uid})
+            if existing:
+                await db.db["user_stats"].update_one(
+                    {"user_id": uid},
+                    {"$inc": {
+                        "matches": matches, "wins": wins, "losses": losses,
+                        "runs": runs, "wickets": wickets, "balls_faced": balls_faced,
+                        "balls_bowled": balls_bowled, "runs_conceded": runs_conceded,
+                        "sixes": sixes, "fours": fours, "centuries": centuries,
+                        "fifties": fifties, "ducks": ducks, "hat_tricks": hat_tricks,
+                        "moms": moms,
+                    }, "$max": {
+                        "highest_score": highest_score,
+                        "best_partnership": best_partnership,
+                    }, "$set": {
+                        **({"username": username} if username else {}),
+                        **({"first_name": first_name} if first_name else {}),
+                    }}
+                )
+            else:
+                await db.db["user_stats"].insert_one({
+                    "user_id": uid,
+                    "username": username,
+                    "first_name": first_name,
+                    "matches": matches, "wins": wins, "losses": losses,
+                    "runs": runs, "wickets": wickets, "balls_faced": balls_faced,
+                    "balls_bowled": balls_bowled, "runs_conceded": runs_conceded,
+                    "sixes": sixes, "fours": fours, "centuries": centuries,
+                    "fifties": fifties, "ducks": ducks, "hat_tricks": hat_tricks,
+                    "moms": moms, "highest_score": highest_score,
+                    "best_partnership": best_partnership,
+                })
+
+            await db.db["users"].update_one(
+                {"user_id": uid},
+                {"$setOnInsert": {"user_id": uid, "name": first_name or username or "Player", "coins": 1000, "games_played": 0, "notify_enabled": True}},
+                upsert=True
+            )
+
+            added += 1
+
+        except Exception as e:
+            skipped += 1
+            errors.append(f"uid={record.get('user_id','?')}: {str(e)[:60]}")
+
+        if (idx + 1) % 3 == 0 or idx == total - 1:
+            await update_progress(idx)
+            await asyncio.sleep(0.1)
 
     result_text = (
         "✅ <b>Import Complete!</b>\n\n"

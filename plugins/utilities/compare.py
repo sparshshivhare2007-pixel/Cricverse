@@ -374,9 +374,8 @@ async def head2head_cmd(client, message):
 
     status = await message.reply_text("⚔️ Building compare card…")
 
-    async with db.pool.acquire() as conn:
-        s1 = await conn.fetchrow("SELECT * FROM user_stats WHERE user_id=$1", uid1)
-        s2 = await conn.fetchrow("SELECT * FROM user_stats WHERE user_id=$1", uid2)
+    s1 = await db.db["user_stats"].find_one({"user_id": uid1})
+    s2 = await db.db["user_stats"].find_one({"user_id": uid2})
 
     if not s1 or not s2:
         return await status.edit_text(
