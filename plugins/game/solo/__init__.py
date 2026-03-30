@@ -8,7 +8,7 @@ PLAYZONE_BTN = InlineKeyboardMarkup([[
 ]])
 
 SOLO_TIMEOUT_BANS: dict = {}
-SOLO_BAN_MINUTES = 15
+SOLO_BAN_MINUTES = 20
 
 
 def is_solo_banned(chat_id: int, user_id: int) -> bool:

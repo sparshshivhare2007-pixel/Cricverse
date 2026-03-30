@@ -276,6 +276,18 @@ async def _next_ball(client, match):
     await send_solo_ball_prompt(client, match)
 
 
+def _cancel_solo_timers(match):
+    """Cancel all running timeout tasks for a solo match."""
+    timeouts = match.get("timeouts", {})
+    for role in ("batter", "bowler"):
+        task = timeouts.get(role, {}).get("task")
+        if task and not task.done():
+            task.cancel()
+        if role in timeouts:
+            timeouts[role]["task"] = None
+            timeouts[role]["fails"] = 0
+
+
 async def _end_solo_match(match, forced=False):
     client = match.get("client")
     chat_id = match.get("chat_id")
@@ -283,6 +295,7 @@ async def _end_solo_match(match, forced=False):
         match["phase"] = "finished"
         return
 
+    _cancel_solo_timers(match)
     match["phase"] = "finished"
 
     try:
@@ -414,7 +427,7 @@ async def _send_solo_log(client, match):
         )
 
         await asyncio.wait_for(
-            client.send_message(log_channel, text, parse_mode="html"),
+            client.send_message(log_channel, text, parse_mode=ParseMode.HTML),
             timeout=10,
         )
     except Exception as e:

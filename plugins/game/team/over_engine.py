@@ -894,6 +894,15 @@ async def end_match(match, forced: bool = False):
         match["phase"] = "finished"
         return
 
+    # Cancel all pending timeout timers so reminders stop immediately
+    for role in ("batter", "bowler"):
+        task = match.get("timeouts", {}).get(role, {}).get("task")
+        if task and not task.done():
+            task.cancel()
+    join_task = match.get("join_timer_task")
+    if join_task and not join_task.done():
+        join_task.cancel()
+
     teams = match.get("teams", {})
     team_a = teams.get("A", {"runs": 0, "wickets": 0, "players": []})
     team_b = teams.get("B", {"runs": 0, "wickets": 0, "players": []})

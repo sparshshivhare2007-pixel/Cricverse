@@ -22,11 +22,21 @@ async def auto_clean_solo(bot):
 
             for chat_id, match in to_remove:
                 try:
+                    timeouts = match.get("timeouts", {})
+                    for role in ("batter", "bowler"):
+                        task = timeouts.get(role, {}).get("task")
+                        if task and not task.done():
+                            task.cancel()
+                except Exception:
+                    pass
+
+                try:
+                    from pyrogram.enums import ParseMode
                     await bot.send_message(
                         chat_id,
                         "🧹 <b>Solo game auto-ended</b> due to inactivity (10 min).\n"
                         "Start a new game with /start",
-                        parse_mode="html",
+                        parse_mode=ParseMode.HTML,
                     )
                 except Exception:
                     pass

@@ -1,6 +1,8 @@
 import asyncio
 from pyrogram.enums import ParseMode
 
+SOLO_TIMEOUT_BAN_MINUTES = 20
+
 
 async def start_solo_timer(match, role):
     client = match.get("client")
@@ -30,7 +32,7 @@ async def start_solo_timer(match, role):
     try:
         await client.send_message(
             chat_id,
-            f"⚠️ <b>10 seconds left!</b>\n{mention}, play NOW or face consequences!",
+            f"⚠️ <b>10 seconds left!</b>\n{mention}, play NOW or face elimination!",
             parse_mode=ParseMode.HTML,
         )
     except Exception:
@@ -47,6 +49,29 @@ def _already_played(match, role):
     if role == "bowler":
         return match.get("bowled", False)
     return match.get("batted", False) or not match.get("bowled", False)
+
+
+async def _apply_timeout_penalty(match, role, user_id):
+    """
+    Apply -6 to the player's individual run score, remove them from the game,
+    and ban them for SOLO_TIMEOUT_BAN_MINUTES in this group.
+    """
+    from plugins.game.solo import ban_solo_user
+
+    chat_id = match.get("chat_id")
+
+    # Deduct -6 from the player's individual run score (can go negative)
+    stats = match.setdefault("player_stats", {})
+    p = stats.setdefault(user_id, {})
+    current_runs = p.get("runs", 0)
+    p["runs"] = current_runs - 6
+
+    # Remove player from the active players list permanently
+    if user_id in match.get("players", []):
+        match["players"].remove(user_id)
+
+    # Issue 20-minute ban
+    ban_solo_user(chat_id, user_id, SOLO_TIMEOUT_BAN_MINUTES)
 
 
 async def _handle_solo_timeout(match, role):
@@ -67,7 +92,7 @@ async def _handle_solo_timeout(match, role):
     mention = f"<a href='tg://user?id={user_id}'>{name}</a>"
     fails = t_info.get("fails", 0)
 
-    # First warning — chance 1 left
+    # ── Strike 1: warn, give one last chance ──────────────────────────────
     if fails == 0:
         t_info["fails"] = 1
         match["prompt_dispatched"] = False
@@ -75,9 +100,9 @@ async def _handle_solo_timeout(match, role):
             await client.send_message(
                 chat_id,
                 (
-                    "🚩 <b>TIME WARNING #1</b>\n"
+                    "🚩 <b>TIME WARNING — LAST CHANCE!</b>\n"
                     f"{mention} is freezing under pressure.\n"
-                    "⚠️ <b>1 more chance</b> before penalty kicks in!"
+                    f"⚠️ <b>Miss again = -6 runs, elimination & {SOLO_TIMEOUT_BAN_MINUTES}-min ban!</b>"
                 ),
                 parse_mode=ParseMode.HTML,
             )
@@ -86,79 +111,57 @@ async def _handle_solo_timeout(match, role):
         t_info["task"] = asyncio.create_task(start_solo_timer(match, role))
         return
 
-    # Second warning — last chance
-    if fails == 1:
-        t_info["fails"] = 2
-        match["prompt_dispatched"] = False
-        try:
-            await client.send_message(
-                chat_id,
-                (
-                    "🚨 <b>TIME WARNING #2 — FINAL WARNING</b>\n"
-                    f"{mention} is still not playing!\n"
-                    "💀 <b>Next timeout = -6 runs penalty & action taken.</b>"
-                ),
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception:
-            pass
-        t_info["task"] = asyncio.create_task(start_solo_timer(match, role))
-        return
-
-    # Third strike — apply penalty
+    # ── Strike 2: penalty + eliminate + ban ───────────────────────────────
     t_info["fails"] = 0
-    match["total_runs"] = max(0, match.get("total_runs", 0) - 6)
+
+    await _apply_timeout_penalty(match, role, user_id)
+
+    new_score = match.get("player_stats", {}).get(user_id, {}).get("runs", 0)
+    score_display = f"{new_score}" if new_score >= 0 else f"{new_score}"
 
     penalty_msg = (
-        "🚫 <b>CLOCK WINS</b>\n\n"
-        f"{mention} couldn't beat the timer ⏰\n"
-        "🧮 <b>-6 runs</b> penalty applied.\n"
+        "🚫 <b>TIMEOUT ELIMINATION</b>\n\n"
+        f"{mention} missed twice — the clock wins!\n"
+        f"🧮 <b>-6 runs penalty</b> applied → Score: <b>{score_display}</b>\n"
+        f"❌ <b>Eliminated</b> from this match.\n"
+        f"🔴 <b>Banned for {SOLO_TIMEOUT_BAN_MINUTES} min</b> from solo games in this group.\n"
     )
 
     if role == "batter":
-        # Track batter timeout eliminations
-        if "timeout_strikes" not in match:
-            match["timeout_strikes"] = {}
-        match["timeout_strikes"][user_id] = match["timeout_strikes"].get(user_id, 0) + 1
-        strike_count = match["timeout_strikes"][user_id]
-
-        if strike_count >= 2:
-            from plugins.game.solo import ban_solo_user, ban_remaining_seconds, SOLO_BAN_MINUTES
-            ban_solo_user(chat_id, user_id, SOLO_BAN_MINUTES)
-            penalty_msg += (
-                f"☝️ <b>Batter is OUT</b> — defeated by the clock again! (No bowler credit)\n\n"
-                f"🔴 <b>TIMEOUT BAN:</b> {mention} has been eliminated from this match "
-                f"and is <b>banned for {SOLO_BAN_MINUTES} minutes</b> from all solo games in this group!"
-            )
-            try:
-                await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
-            except Exception:
-                pass
-            # Remove them from the players list so they can't bat or bowl
-            if user_id in match["players"]:
-                match["players"].remove(user_id)
-            from plugins.game.solo.engine import solo_advance_ball
-            await solo_advance_ball(match, "W", credit_bowler=False)
-        else:
-            penalty_msg += (
-                "☝️ <b>Batter is OUT</b> — defeated by the clock. (No bowler credit)\n"
-                f"⚠️ <b>Strike {strike_count}/2</b> — one more timeout = 15-min group ban!"
-            )
-            try:
-                await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
-            except Exception:
-                pass
-            from plugins.game.solo.engine import solo_advance_ball
-            await solo_advance_ball(match, "W", credit_bowler=False)
+        penalty_msg += "💨 Moving to the next batter…"
+        try:
+            await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
+        from plugins.game.solo.engine import solo_advance_ball
+        await solo_advance_ball(match, "W", credit_bowler=False)
 
     else:
-        penalty_msg += "🎳 <b>Bowler skipped.</b> Next bowler steps in."
-        match.update({"bowled": False, "batted": False, "prompt_dispatched": False, "last_bowl": None})
-        match["balls_in_spell"] = 0
+        # Bowler eliminated — find next bowler
         from plugins.game.solo import get_next_solo_bowler
         from plugins.game.solo.state import send_solo_ball_prompt
+
         next_b = get_next_solo_bowler(match)
+        if next_b is None:
+            # No valid bowler left — end the match
+            penalty_msg += "⚠️ No bowlers left. Match ends."
+            try:
+                await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
+            except Exception:
+                pass
+            from plugins.game.solo.engine import _end_solo_match
+            await _end_solo_match(match, forced=True)
+            return
+
         match["current_bowler"] = next_b
+        penalty_msg += "🎳 Next bowler steps in."
+        match.update({
+            "bowled": False,
+            "batted": False,
+            "prompt_dispatched": False,
+            "last_bowl": None,
+            "balls_in_spell": 0,
+        })
         try:
             await client.send_message(chat_id, penalty_msg, parse_mode=ParseMode.HTML)
         except Exception:
