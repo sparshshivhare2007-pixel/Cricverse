@@ -683,7 +683,6 @@ async def set_bowler(client, message):
         asyncio.create_task(start_first_ball(client, match))
 
     else:
-        from plugins.game.team.init import init_match
         await message.reply_text(f"⚾ <b>{bowler_user.first_name}</b> takes the opening over.")
 
         new_match = await init_match(
