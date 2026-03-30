@@ -101,6 +101,7 @@ async def solo_mode_selected(client, query):
         "last_active": time.time(),
         "announced_achievements": {"batting": {}, "bowling": {}},
         "timeout_strikes": {},
+        "eliminated_player_ids": set(),
     }
     match = ACTIVE_MATCHES[chat_id]
 

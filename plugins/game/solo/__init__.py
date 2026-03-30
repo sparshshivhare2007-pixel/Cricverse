@@ -37,13 +37,13 @@ def ban_remaining_seconds(chat_id: int, user_id: int) -> int:
 def get_next_solo_bowler(match):
     players = match["players"]
     current_batter = match["current_batter"]
-    chat_id = match.get("chat_id")
+    eliminated = match.get("eliminated_player_ids", set())
     n = len(players)
     start_pos = match.get("bowler_rotation_pos", 1)
     for offset in range(n):
         pos = (start_pos + offset) % n
         candidate = players[pos]
-        if candidate != current_batter and not is_solo_banned(chat_id, candidate):
+        if candidate != current_batter and candidate not in eliminated:
             match["bowler_rotation_pos"] = (pos + 1) % n
             return candidate
     return None
@@ -72,6 +72,7 @@ def build_solo_score_text(match):
     players = match.get("players", [])
     user_cache = match.get("user_cache", {})
     stats = match.get("player_stats", {})
+    eliminated = match.get("eliminated_player_ids", set())
 
     lines = ["≪━─━─━◈ <b>Sᴏʟᴏ Sᴄᴏʀᴇ</b> ◈━─━─━≫\n"]
 
@@ -88,11 +89,19 @@ def build_solo_score_text(match):
         sr = _calc_sr(runs, balls)
         eco = _calc_eco(r_conceded, b_bowled)
 
-        lines.append(
-            f"❖ <b>{name}</b> — {runs} ({balls})\n"
-            f"➥ 4️⃣: {fours} | 6️⃣: {sixes} ⟶ SR : {sr}\n"
-            f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs | Eco: {eco}"
-        )
+        if uid in eliminated:
+            # Eliminated players still show their score (can be negative) with a ❌ marker
+            lines.append(
+                f"❌ <b>{name}</b> — <b>{runs}</b> ({balls}) <i>[Eliminated]</i>\n"
+                f"➥ 4️⃣: {fours} | 6️⃣: {sixes} ⟶ SR : {sr}\n"
+                f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs | Eco: {eco}"
+            )
+        else:
+            lines.append(
+                f"❖ <b>{name}</b> — {runs} ({balls})\n"
+                f"➥ 4️⃣: {fours} | 6️⃣: {sixes} ⟶ SR : {sr}\n"
+                f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs | Eco: {eco}"
+            )
 
     total_runs = match.get("total_runs", 0)
     total_balls = match.get("total_balls", 0)

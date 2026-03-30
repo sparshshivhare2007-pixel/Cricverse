@@ -53,24 +53,24 @@ def _already_played(match, role):
 
 async def _apply_timeout_penalty(match, role, user_id):
     """
-    Apply -6 to the player's individual run score, remove them from the game,
-    and ban them for SOLO_TIMEOUT_BAN_MINUTES in this group.
+    Apply -6 to the player's individual run score (can go negative),
+    mark them as eliminated in this match, and ban them for future solo games.
+    Player stays in match["players"] so the scorecard still shows their -6 score.
     """
     from plugins.game.solo import ban_solo_user
 
     chat_id = match.get("chat_id")
 
-    # Deduct -6 from the player's individual run score (can go negative)
+    # Deduct -6 from the player's individual run score (can go negative: 0 → -6, 2 → -4, 6 → 0)
     stats = match.setdefault("player_stats", {})
     p = stats.setdefault(user_id, {})
     current_runs = p.get("runs", 0)
     p["runs"] = current_runs - 6
 
-    # Remove player from the active players list permanently
-    if user_id in match.get("players", []):
-        match["players"].remove(user_id)
+    # Mark as eliminated in THIS match (kept in players list so scorecard shows -6)
+    match.setdefault("eliminated_player_ids", set()).add(user_id)
 
-    # Issue 20-minute ban
+    # Issue 20-minute ban from joining future solo games in this group
     ban_solo_user(chat_id, user_id, SOLO_TIMEOUT_BAN_MINUTES)
 
 

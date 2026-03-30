@@ -231,7 +231,7 @@ async def _next_batter_or_end(match):
     players = match["players"]
     current_batter = match.get("current_batter")
 
-    from plugins.game.solo import is_solo_banned
+    eliminated = match.get("eliminated_player_ids", set())
 
     try:
         current_idx = players.index(current_batter)
@@ -243,7 +243,7 @@ async def _next_batter_or_end(match):
     search_idx = current_idx + 1
     while search_idx < len(players):
         candidate = players[search_idx]
-        if not is_solo_banned(chat_id, candidate):
+        if candidate not in eliminated:
             next_batter = candidate
             break
         search_idx += 1
@@ -438,8 +438,9 @@ def _build_final_scorecard_text(match):
     players = match.get("players", [])
     stats = match.get("player_stats", {})
     user_cache = match.get("user_cache", {})
+    eliminated = match.get("eliminated_player_ids", set())
 
-    top_scorer_id, top_runs = None, -1
+    top_scorer_id, top_runs = None, -999
     top_wickets_id, top_wickets = None, -1
 
     for uid in players:
@@ -466,11 +467,18 @@ def _build_final_scorecard_text(match):
         sr = _calc_sr(runs, balls)
         eco = _calc_eco(r_conceded, b_bowled)
 
-        lines.append(
-            f"❖ <b>{name}</b> — {runs} ({balls})\n"
-            f"➥ 4️⃣: {fours} | 6️⃣: {sixes} ⟶ SR : {sr}\n"
-            f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs | Eco: {eco}"
-        )
+        if uid in eliminated:
+            lines.append(
+                f"❌ <b>{name}</b> — <b>{runs}</b> ({balls}) <i>[Timeout Eliminated]</i>\n"
+                f"➥ 4️⃣: {fours} | 6️⃣: {sixes} ⟶ SR : {sr}\n"
+                f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs | Eco: {eco}"
+            )
+        else:
+            lines.append(
+                f"❖ <b>{name}</b> — {runs} ({balls})\n"
+                f"➥ 4️⃣: {fours} | 6️⃣: {sixes} ⟶ SR : {sr}\n"
+                f"➥ Bowling: {b_bowled} balls | {wkts} wkts | {r_conceded} runs | Eco: {eco}"
+            )
 
     lines.append("────┈┄┄╌╌╌╌┄┄┈────")
 
