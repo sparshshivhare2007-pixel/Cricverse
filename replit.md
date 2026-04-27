@@ -27,6 +27,26 @@ A Telegram bot for cricket-based group games with a Flask web log dashboard.
 - **Event/Tournament system** — `/start_event`, `/register`, `/deregister`, `/list_events`, `/event_players`, `/end_event`
 - **Broadcast upgrade** — `/broadcast` now offers Forward (with label) or Copy (clean, no label) modes via inline buttons
 
+## Group Entry Commands
+
+- `/start` in **DM** → welcome screen (in `plugins/common/start.py`)
+- `/start` in **groups** → no longer starts a game; politely redirects to DM
+- `/play` (or `/newgame`) in **groups** → opens the team / solo / duel mode picker
+- `/duel` in **groups** → DM-only redirect; `/duel` in DM opens the matchmaking queue
+
+## Maintenance Mode
+
+Owner-only `/maintenance` command (in `plugins/admin/maintenance.py`) globally pauses game commands:
+
+- `/maintenance` – show current status and message preview
+- `/maintenance on [reason]` – enable; optional reason becomes the player-facing message
+- `/maintenance off` – disable
+
+Implementation:
+- State stored in Mongo `bot_settings` collection (`{_id: "maintenance_enabled"}`) with in-memory cache in `database/settings.py`.
+- A high-priority intercept handler (`group=-10`) blocks game commands like `/duel`, `/joingame`, `/score`, `/register`, etc. and replies with the friendly maintenance message.
+- Owner commands (`/owner`, `/dbbackup`, `/maintenance`, etc.) bypass the gate.
+
 ## Owner Panel
 
 Owner is centralized in `Config.OWNER_IDS` (currently `8186068163`). Other modules read from `Config.OWNER_IDS` instead of hardcoding.

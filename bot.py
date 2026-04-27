@@ -19,6 +19,12 @@ async def _db_watchdog():
 async def initialize_database():
     await db.connect()
     await migrate()
+    try:
+        from database.settings import load_settings
+        await load_settings(force=True)
+        print("✅ Settings loaded")
+    except Exception as e:
+        print(f"⚠️ Settings load failed: {e}")
     print("✅ Database connected & tables ready")
 
 async def start_nexora():

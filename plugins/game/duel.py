@@ -494,16 +494,19 @@ async def duel_pick(client, query):
 
 @Client.on_message(filters.command("duel") & filters.group)
 async def duel_group_cmd(client, message):
+    """`/duel` is DM-only — politely redirect group users with a deep link."""
     from config import Config
     bot_username = Config.BOT_USERNAME.lstrip("@")
     buttons = InlineKeyboardMarkup([[
-        InlineKeyboardButton("⚔️ Play 1v1 Duel in DM", url=f"https://t.me/{bot_username}?start=duel")
+        InlineKeyboardButton(
+            "⚔️ Open duel in DM",
+            url=f"https://t.me/{bot_username}?start=duel",
+        )
     ]])
     await message.reply_text(
-        "⚔️ <b>1v1 Duel Mode</b>\n"
-        "────┈┄┄╌╌╌╌┄┄┈────\n\n"
-        "Duels happen <b>in the bot DM</b>!\n"
-        "Tap below to open a chat with the bot and join the queue 👇",
+        "⚔️ <b>1v1 Duel is DM-only</b>\n"
+        "──┈┄┄╌╌╌╌┄┄┈──\n"
+        "Tap the button below to queue in my DM 👇",
         parse_mode=ParseMode.HTML,
         reply_markup=buttons,
     )

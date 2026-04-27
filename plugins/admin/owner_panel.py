@@ -92,6 +92,10 @@ def _panel_text() -> str:
     return (
         "👑 <b>OWNER CONTROL PANEL</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>Maintenance</b>\n"
+        "• /maintenance – Show status\n"
+        "• /maintenance on <code>[reason]</code> – Pause game commands\n"
+        "• /maintenance off – Resume\n\n"
         "<b>Database</b>\n"
         "• /dbbackup <code>[collection|all]</code> – Export Mongo → JSON\n"
         "• /dbstats – Collection counts &amp; sizes\n"

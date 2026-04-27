@@ -161,6 +161,10 @@ async def catch_event_group_link(client, message):
 
 @Client.on_message(filters.command("register"))
 async def register_cmd(client, message):
+    user = message.from_user
+    if not user:
+        return
+
     event = await _get_active_event()
     if not event:
         return await message.reply_text(
@@ -176,17 +180,33 @@ async def register_cmd(client, message):
             parse_mode=ParseMode.HTML,
         )
 
-    user = message.from_user
     group_id = event.get("group_id")
     group_title = event.get("group_title", "the required group")
     group_link = event.get("group_link", "")
 
-    # Check membership
-    try:
-        member = await client.get_chat_member(group_id, user.id)
-        if member.status.value in ("left", "banned", "kicked"):
-            raise UserNotParticipant
-    except (UserNotParticipant, Exception):
+    # ── membership check ────────────────────────────────────────────────
+    # Three outcomes:
+    #   is_member  → True  : user is in the group
+    #   is_member  → False : user is NOT in the group (UserNotParticipant)
+    #   is_member  → None  : we couldn't verify (bot not in group, peer error)
+    is_member = None
+    if group_id:
+        try:
+            member = await client.get_chat_member(group_id, user.id)
+            status = getattr(member.status, "name", str(member.status)).upper()
+            if status in ("LEFT", "BANNED", "KICKED", "RESTRICTED"):
+                is_member = False
+            else:
+                is_member = True
+        except UserNotParticipant:
+            is_member = False
+        except (PeerIdInvalid, ChatAdminRequired):
+            is_member = None
+        except Exception as e:
+            print(f"[register] membership check failed: {e}")
+            is_member = None
+
+    if is_member is False:
         link_btn = InlineKeyboardMarkup([[
             InlineKeyboardButton(f"👥 Join {group_title}", url=group_link)
         ]]) if group_link else None
@@ -196,6 +216,17 @@ async def register_cmd(client, message):
             f"After joining, come back and send /register again.",
             parse_mode=ParseMode.HTML,
             reply_markup=link_btn,
+        )
+
+    if is_member is None and group_id:
+        # We couldn't verify membership — let the user proceed but warn them.
+        await message.reply_text(
+            "ℹ️ <i>Couldn't verify your group membership — proceeding anyway. "
+            "If you haven't joined the event group yet, please do so:</i>\n"
+            f"📌 <b>{html.escape(group_title)}</b>"
+            + (f"\n🔗 {group_link}" if group_link else ""),
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
         )
 
     event_id = str(event["_id"])
