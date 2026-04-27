@@ -40,3 +40,17 @@ requests
 TgCrypto-pyrofork
 werkzeug==3.0.1
 asyncpg
+aiocron
+asyncpg
+flask==3.0.0
+GitPython
+gunicorn
+httpx
+matplotlib
+motor
+pillow
+pymongo[srv]
+pyrofork
+requests
+TgCrypto-pyrofork
+werkzeug==3.0.1
