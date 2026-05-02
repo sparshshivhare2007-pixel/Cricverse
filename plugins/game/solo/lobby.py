@@ -2,7 +2,7 @@ import asyncio
 import time
 import uuid
 from pyrogram import Client, filters
-from pyrogram.enums import ParseMode, ChatMemberStatus
+from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from database.connection import db
@@ -13,6 +13,7 @@ from database.games import (
 )
 from plugins.game.team import ACTIVE_MATCHES
 from Assets.files import MEMBERS_IMAGE
+from utils.guards import is_group_admin, ensure_user
 
 SOLO_JOIN_SECONDS = 120
 MIN_PLAYERS = 3
@@ -34,19 +35,11 @@ def _fresh_player_stats():
 
 
 async def _ensure_user_exists(user):
-    await db.db["users"].update_one(
-        {"user_id": user.id},
-        {"$setOnInsert": {"user_id": user.id, "name": user.first_name or "Player", "coins": 1000, "games_played": 0, "notify_enabled": True}},
-        upsert=True
-    )
+    await ensure_user(user)
 
 
 async def _is_admin(client, chat_id, user_id):
-    try:
-        member = await client.get_chat_member(chat_id, user_id)
-        return member.status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
-    except Exception:
-        return False
+    return await is_group_admin(client, chat_id, user_id)
 
 
 @Client.on_callback_query(filters.regex("^mode_solo$"))

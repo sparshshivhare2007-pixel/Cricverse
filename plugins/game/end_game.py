@@ -4,12 +4,11 @@ import os
 import uuid
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.enums import ChatMemberStatus
-
 from database.games import is_game_active, end_game as close_db_game
 from plugins.game.team import ACTIVE_MATCHES
 from plugins.game.team.over_engine import end_match
 from plugins.utilities.logger import send_match_log
+from utils.guards import is_host_or_admin
 
 class MatchEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -18,17 +17,6 @@ class MatchEncoder(json.JSONEncoder):
         if isinstance(obj, uuid.UUID):
             return str(obj)
         return str(obj)
-
-async def is_host_or_admin(client, chat_id, user_id, host_id):
-    if user_id == host_id:
-        return True
-    try:
-        member = await client.get_chat_member(chat_id, user_id)
-        if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
-            return True
-    except:
-        pass
-    return False
 
 @Client.on_message(filters.command("endgame") & filters.group)
 async def end_game_command(client, message):

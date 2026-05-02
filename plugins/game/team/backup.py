@@ -2,9 +2,10 @@ import json
 import os
 import uuid
 from pyrogram import Client, filters
-from pyrogram.enums import ParseMode, ChatMemberStatus
+from pyrogram.enums import ParseMode
 from plugins.game.team import ACTIVE_MATCHES
 from utils.permissions import host_only
+from utils.guards import is_group_admin
 from config import Config
 
 def fix_json_keys(data):
@@ -23,19 +24,8 @@ def fix_json_keys(data):
 async def restore_game_cmd(client, message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    
-    is_admin = False
-    if hasattr(Config, "OWNER_IDS") and user_id in Config.OWNER_IDS:
-        is_admin = True
-    else:
-        try:
-            member = await client.get_chat_member(chat_id, user_id)
-            if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
-                is_admin = True
-        except:
-            pass
-            
-    if not is_admin:
+
+    if user_id not in Config.OWNER_IDS and not await is_group_admin(client, chat_id, user_id):
         return await message.reply_text("🚫 **Access Denied:** only **Group Admins** can restore the game!")
 
     if not message.reply_to_message or not message.reply_to_message.document:
