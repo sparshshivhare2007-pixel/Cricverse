@@ -28,7 +28,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "gunicorn --bind 0.0.0.0:5000 app:app & python3 bot.py"
+args = "/home/runner/workspace/.pythonlibs/bin/gunicorn --bind 0.0.0.0:5000 app:app & python3 bot.py"
 waitForPort = 5000
 
 [[ports]]
