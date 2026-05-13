@@ -119,41 +119,60 @@ def _overs_to_balls(overs_str: str) -> int:
         return 0
 
 
+def _parse_num(raw: str) -> int:
+    """Parse a possibly comma-formatted number like '2,534' → 2534."""
+    return int(raw.replace(",", "").replace("_", "").strip())
+
+
+# Matches plain digits OR digit groups separated by commas: 123 | 1,234 | 12,345,678
+_N = r"([\d,]+)"
+
+
 def _parse_profile_message(text: str) -> dict:
     parsed = {}
     patterns = [
-        ("matches",       r"Matches\s*[:\-]\s*(\d+)"),
-        ("moms",          r"MOMs?\s*[:\-]\s*(\d+)"),
-        ("captain_wins",  r"Captaincy\s*[:\-]\s*(\d+)\s*Wins"),
-        ("captain_losses",r"Captaincy\s*.*?(\d+)\s*Losses"),
-        ("runs",          r"Runs\s*[:\-]\s*(\d+)"),
-        ("balls_faced",   r"Balls\s*[:\-]\s*(\d+)"),
-        ("highest_score", r"Highest\s*[:\-]\s*(\d+)"),
-        ("sixes",         r"6️⃣\s*[:\-]?\s*(\d+)"),
-        ("fours",         r"4️⃣\s*[:\-]?\s*(\d+)"),
-        ("fifties",       r"50s\s*[:\-]\s*(\d+)"),
-        ("centuries",     r"100s\s*[:\-]\s*(\d+)"),
-        ("ducks",         r"Ducks\s*[:\-]\s*(\d+)"),
-        ("wickets",       r"Wickets\s*[:\-]\s*(\d+)"),
-        ("hat_tricks",    r"Hat[- ]Tricks?\s*[:\-]\s*(\d+)"),
+        ("matches",        rf"Matches\s*[:\-]\s*{_N}"),
+        ("moms",           rf"MOMs?\s*[:\-]\s*{_N}"),
+        ("captain_wins",   rf"Captaincy\s*[:\-]\s*{_N}\s*Wins"),
+        ("captain_losses", rf"Captaincy\s*.*?{_N}\s*Losses"),
+        ("runs",           rf"Runs\s*[:\-]\s*{_N}"),
+        ("balls_faced",    rf"Balls\s*[:\-]\s*{_N}"),
+        ("highest_score",  rf"Highest\s*[:\-]\s*{_N}"),
+        ("sixes",          rf"6️⃣\s*[:\-]?\s*{_N}"),
+        ("fours",          rf"4️⃣\s*[:\-]?\s*{_N}"),
+        ("fifties",        rf"50s\s*[:\-]\s*{_N}"),
+        ("centuries",      rf"100s\s*[:\-]\s*{_N}"),
+        ("ducks",          rf"Ducks\s*[:\-]\s*{_N}"),
+        ("wickets",        rf"Wickets\s*[:\-]\s*{_N}"),
+        ("hat_tricks",     rf"Hat[- ]Tricks?\s*[:\-]\s*{_N}"),
+        ("runs_conceded",  rf"(?:Runs?\s+Conceded|RC)\s*[:\-]\s*{_N}"),
+        ("balls_bowled",   rf"Balls?\s+Bowled\s*[:\-]\s*{_N}"),
+        ("not_outs",       rf"Not\s+Outs?\s*[:\-]\s*{_N}"),
+        ("wins",           rf"(?:Total\s+)?Wins\s*[:\-]\s*{_N}"),
+        ("losses",         rf"(?:Total\s+)?Losses\s*[:\-]\s*{_N}"),
     ]
     for field, pattern in patterns:
         m = re.search(pattern, text, re.IGNORECASE)
         if m:
             try:
-                parsed[field] = int(m.group(1))
+                parsed[field] = _parse_num(m.group(1))
             except ValueError:
                 pass
 
-    m = re.search(r"Overs\s*[:\-]\s*([\d.]+)", text, re.IGNORECASE)
+    # Overs → balls_bowled (e.g. "Overs: 12.4" → 76 balls)
+    m = re.search(r"Overs\s*[:\-]\s*([\d,]+(?:\.\d+)?)", text, re.IGNORECASE)
     if m:
-        parsed["balls_bowled"] = _overs_to_balls(m.group(1))
+        parsed["balls_bowled"] = _overs_to_balls(m.group(1).replace(",", ""))
 
-    m = re.search(r"(\d+)[×x]\s*Man of the Match", text, re.IGNORECASE)
+    # "N× Man of the Match" alternate MOM format
+    m = re.search(rf"{_N}[×x]\s*Man of the Match", text, re.IGNORECASE)
     if m:
-        val = int(m.group(1))
-        if val > parsed.get("moms", 0):
-            parsed["moms"] = val
+        try:
+            val = _parse_num(m.group(1))
+            if val > parsed.get("moms", 0):
+                parsed["moms"] = val
+        except ValueError:
+            pass
 
     return parsed
 
@@ -347,10 +366,13 @@ async def addstats_cmd(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
     try:
-        value = int(raw_value)
-    except ValueError:
+        value = _parse_num(raw_value)
+        if value < 0:
+            raise ValueError("negative")
+    except (ValueError, AttributeError):
         return await message.reply_text(
-            f"❌ Value must be a whole number, got <code>{html.escape(raw_value)}</code>.",
+            f"❌ Value must be a whole number, got <code>{html.escape(raw_value)}</code>.\n"
+            "Commas are fine — e.g. <code>2,534</code> or <code>2534</code>.",
             parse_mode=ParseMode.HTML,
         )
 
