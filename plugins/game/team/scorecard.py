@@ -394,7 +394,18 @@ async def save_match_stats(match, winner_team):
     try:
         from database.venue_stats import update_venue_stats
         chat_id    = match.get("chat_id")
-        chat_title = match.get("chat_title") or match.get("group_name") or f"Group"
+        chat_title = (
+            match.get("chat_title")
+            or match.get("group_name")
+            or match.get("title")
+            or match.get("group_title")
+        )
+        if chat_id and not chat_title:
+            try:
+                _chat = await match["client"].get_chat(chat_id)
+                chat_title = _chat.title or f"Group {chat_id}"
+            except Exception:
+                chat_title = f"Group {chat_id}"
         if chat_id:
             for uid, p in players.items():
                 await update_venue_stats(

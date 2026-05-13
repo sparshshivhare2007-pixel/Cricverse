@@ -204,7 +204,7 @@ async def bowler_dm_handler(client, message):
         for m in list(ACTIVE_MATCHES.values()):
             so = m.get("super_over", {})
             if so.get("active") and so.get("prompt_dispatched"):
-                innings = so.get("current_innings", 1)
+                innings   = so.get("current_innings", 1)
                 bat_order = so.get("bat_order", [])
                 if innings <= len(bat_order):
                     batting_team = bat_order[innings - 1]
@@ -328,11 +328,11 @@ async def batter_handler(client, message):
     so = match.get("super_over", {})
     if so.get("active") and match.get("phase") == "SUPER_OVER":
         if so.get("bowled") and not so.get("batted"):
-            innings = so.get("current_innings", 1)
+            innings   = so.get("current_innings", 1)
             bat_order = so.get("bat_order", [])
             if innings <= len(bat_order):
                 batting_team = bat_order[innings - 1]
-                if so.get("batter", {}).get(batting_team) == uid:
+                if so.get("striker", {}).get(batting_team) == uid:
                     await message.reply_text("👍", quote=True)
                     from plugins.game.team.super_over import handle_so_bat
                     await handle_so_bat(client, match, uid, int(message.text))

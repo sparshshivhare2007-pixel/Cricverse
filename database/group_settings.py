@@ -8,6 +8,7 @@ DEFAULTS = {
     "spam_free":          False,
     "edge_rule":          False,
     "disabled_numbers":   [],
+    "ball_timeout":       60,
 }
 
 _cache: dict = {}
