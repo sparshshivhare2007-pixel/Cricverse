@@ -139,7 +139,7 @@ def _timeout_label(secs: int) -> str:
 async def _main_panel(chat_id: int):
     settings  = await get_group_settings(chat_id)
     premium   = await get_premium(chat_id)
-    plan_name = PLANS[premium["plan"]]["name"] if premium else None
+    plan_name = PLANS.get(premium["plan"], {}).get("name", premium["plan"].title()) if premium else None
 
     # Header
     plan_line = (
@@ -171,10 +171,10 @@ async def _main_panel(chat_id: int):
     buttons.append([InlineKeyboardButton("─── 💎 Premium ───", callback_data="gs_noop")])
 
     # Premium: spam_free + disabled_numbers on one row
-    spam_unlocked = premium and plan_unlocked(premium, "basic")
-    dn_unlocked   = premium and plan_unlocked(premium, "standard")
-    edge_unlocked = premium and plan_unlocked(premium, "pro")
-    to_unlocked   = premium and plan_unlocked(premium, "basic")
+    spam_unlocked = premium and plan_unlocked(premium, "silver")
+    dn_unlocked   = premium and plan_unlocked(premium, "gold")
+    edge_unlocked = premium and plan_unlocked(premium, "gold")
+    to_unlocked   = premium and plan_unlocked(premium, "silver")
 
     # Row: spam_free | disabled_numbers
     spam_status = ("✅" if settings.get("spam_free", False) else "❌") if spam_unlocked else "🔒"
@@ -236,11 +236,11 @@ async def _dn_panel(chat_id: int):
     premium  = await get_premium(chat_id)
     dn       = settings.get("disabled_numbers", [])
 
-    if not premium or not plan_unlocked(premium, "standard"):
+    if not premium or not plan_unlocked(premium, "gold"):
         text = (
             f"{FEATURE_DESC['disabled_numbers']}\n\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            f"{PLAN_LOCK_MSG['standard']}"
+            f"{PLAN_LOCK_MSG['gold']}"
         )
         return text, InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="gs_home")]])
 
@@ -266,13 +266,13 @@ async def _dn_panel(chat_id: int):
 async def _timeout_panel(chat_id: int):
     premium     = await get_premium(chat_id)
     cur_timeout = await get_setting(chat_id, "ball_timeout") or 60
-    unlocked    = premium and plan_unlocked(premium, "basic")
+    unlocked    = premium and plan_unlocked(premium, "silver")
 
     if not unlocked:
         text = (
             f"{FEATURE_DESC['ball_timeout']}\n\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            f"{PLAN_LOCK_MSG['basic']}"
+            f"{PLAN_LOCK_MSG['silver']}"
         )
         return text, InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="gs_home")]])
 

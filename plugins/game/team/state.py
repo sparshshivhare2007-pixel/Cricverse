@@ -364,6 +364,23 @@ async def batter_handler(client, message):
     except Exception:
         pass
 
+    # ── Spam Free Mode check (batter) ─────────────────────────────────────────
+    try:
+        from database.group_settings import get_setting as _gsf
+        from database.premium import can_use_feature
+        if await _gsf(chat_id, "spam_free") and await can_use_feature(chat_id, "spam_free"):
+            batter_hist = match.setdefault("current_batter_numbers", [])
+            if len(batter_hist) >= 2 and batter_hist[-1] == bat_num and batter_hist[-2] == bat_num:
+                return await message.reply_text(
+                    f"🛡️ <b>Spam Free Mode!</b>\n"
+                    f"You can't play <b>{bat_num}</b> three times in a row!\n"
+                    "Try a different shot.",
+                    parse_mode=ParseMode.HTML,
+                    quote=True,
+                )
+    except Exception:
+        pass
+
     # ── Hat-trick ball restriction ────────────────────────────────────────────
     over_balls = match.get("current_over_balls", [])
     is_hat_trick_ball = (
@@ -418,6 +435,7 @@ async def batter_handler(client, message):
     except Exception:
         pass
 
+    match.setdefault("current_batter_numbers", []).append(bat_num)
     match["batted"] = True
     await message.reply_text("👍", quote=True)
 
