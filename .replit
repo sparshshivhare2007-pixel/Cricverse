@@ -42,4 +42,3 @@ run = ["bash", "-c", "gunicorn --bind 0.0.0.0:5000 app:app & python3 bot.py"]
 [userenv]
 
 [userenv.shared]
-BOT_TOKEN = "8658804006:AAEXh-D6jk69i4Auh2WZfJq3_v1aPwIm0Ds"
