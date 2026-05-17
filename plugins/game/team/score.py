@@ -83,9 +83,6 @@ async def score_cmd(client, message: Message):
     if not match.get("bowling_team"):
         match["bowling_team"] = "B" if bat_team == "A" else "A"
 
-    if not match.get("striker") or not match.get("non_striker"):
-        return await message.reply_text("⏳ <b>Hold on!</b> Batters are being picked.", parse_mode=ParseMode.HTML)
-
     SCORE_COOLDOWN[chat_id] = current_time
 
     try:

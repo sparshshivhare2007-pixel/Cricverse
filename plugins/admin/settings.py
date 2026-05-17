@@ -215,6 +215,7 @@ async def _main_panel(chat_id: int):
         InlineKeyboardButton(f"🎳 Over Limit: {ol_display}", callback_data="gs_ol"),
     ])
 
+    buttons.append([InlineKeyboardButton("💎 How to get Premium?", callback_data="gs_premium_help")])
     buttons.append([InlineKeyboardButton("✖ Close", callback_data="gs_close")])
 
     return text, InlineKeyboardMarkup(buttons)
@@ -385,6 +386,18 @@ async def gs_home_cb(client: Client, query: CallbackQuery):
     except Exception:
         pass
     await query.answer()
+
+
+@Client.on_callback_query(filters.regex("^gs_premium_help$"))
+async def gs_premium_help_cb(client: Client, query: CallbackQuery):
+    await query.answer(
+        "💎 To get Premium:\n\n"
+        "1️⃣ Send your query to @LegacyContact_Bot\n"
+        "2️⃣ Mention your preferred plan (Silver / Gold)\n"
+        "3️⃣ Ask the owner to permit your group\n\n"
+        "Plans unlock features like Spam Free, Edge Rule, Ball Timeout & more!",
+        show_alert=True,
+    )
 
 
 @Client.on_callback_query(filters.regex(r"^gs_view_\w+$"))
