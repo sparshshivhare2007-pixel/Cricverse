@@ -1,11 +1,9 @@
 """
 /settings — per-group feature toggle panel (admins only).
 
-Free    : super_over, ai_summary, achievement_alerts, auto_play_again,
-          team_names, toss, show_scorecard
+Free    : super_over, ai_summary, achievement_alerts, auto_play_again, team_names
 Premium : spam_free (Silver+), disabled_numbers (Gold+), edge_rule (Gold+),
-          ball_timeout (Silver+), power_play (Silver+), over_limit (Silver+),
-          drs (Gold+)
+          ball_timeout (Silver+), over_limit (Silver+)
 
 Callback scheme:
   gs_home                       main panel
@@ -41,17 +39,13 @@ FREE_FEATURES = [
     ("achievement_alerts", "🔔 Achievements"),
     ("auto_play_again",    "🔄 Play Again"),
     ("team_names",         "🏷 Team Names"),
-    ("toss",               "🪙 Toss"),
-    ("show_scorecard",     "📊 Scorecard"),
 ]
 
 PREMIUM_FEATURES = [
     ("spam_free",        "🛡 Spam Free",      "silver"),
     ("disabled_numbers", "🔲 Dis. Numbers",   "gold"),
     ("edge_rule",        "⚠️ Edge Rule",       "gold"),
-    ("power_play",       "⚡ Power Play",      "silver"),
     ("over_limit",       "🎳 Over Limit",      "silver"),
-    ("drs",              "🔁 DRS",             "gold"),
 ]
 
 TIMEOUT_OPTIONS = [
@@ -69,8 +63,8 @@ FEATURE_DESC = {
     "super_over": (
         "⚡ <b>Super Over on Tie</b>\n\n"
         "When a match ends in a tie, a Super Over is triggered.\n"
-        "Each team bats 1 over (6 balls) with 2 batters.\n"
-        "2 wickets allowed — highest score wins!\n"
+        "Each team bats 1 over (6 balls) with 1 batter.\n"
+        "1 wicket allowed — highest score wins!\n"
         "Double-tie → match declared a Tie.\n\n"
         "🆓 <b>Free feature — default on.</b>"
     ),
@@ -103,21 +97,6 @@ FEATURE_DESC = {
         "and everywhere Team A/B is normally shown.\n\n"
         "🆓 <b>Free feature — default off.</b>"
     ),
-    "toss": (
-        "🪙 <b>Coin Toss</b>\n\n"
-        "Before each match the bot flips a coin in the group.\n"
-        "The winning captain chooses to <b>Bat</b> or <b>Bowl</b> first.\n\n"
-        "Makes every game feel like real cricket — no fixed batting order.\n\n"
-        "🆓 <b>Free feature — default off.</b>"
-    ),
-    "show_scorecard": (
-        "📊 <b>Auto Scorecard After Innings</b>\n\n"
-        "At the end of each innings the bot automatically posts\n"
-        "the full scorecard in the group — runs, balls, 4s, 6s,\n"
-        "wickets, strike rates, and bowling figures.\n\n"
-        "No need for anyone to type /score after the innings ends.\n\n"
-        "🆓 <b>Free feature — default on.</b>"
-    ),
     "spam_free": (
         "🛡 <b>Spam Free Mode</b>  <i>(Premium)</i>\n\n"
         "Prevents bowlers from sending the same number\n"
@@ -147,15 +126,6 @@ FEATURE_DESC = {
         "After the timer → warning, then -6 runs penalty.\n\n"
         "📦 Requires <b>🥈 Silver plan</b> or above."
     ),
-    "power_play": (
-        "⚡ <b>Power Play Mode</b>  <i>(Premium)</i>\n\n"
-        "The first <b>2 overs</b> of each innings are a Power Play.\n\n"
-        "During Power Play:\n"
-        "• Any score of <b>4 or 6</b> is boosted by +1 (4→5, 6→7)\n"
-        "• Adds extra pressure on the bowler in the opening overs\n\n"
-        "A Power Play banner is shown in the group at the start.\n\n"
-        "📦 Requires <b>🥈 Silver plan</b> or above."
-    ),
     "over_limit": (
         "🎳 <b>Per-Bowler Over Limit</b>  <i>(Premium)</i>\n\n"
         "Limit how many overs a single bowler can bowl per innings.\n\n"
@@ -163,15 +133,6 @@ FEATURE_DESC = {
         "If a bowler hits their limit the captain must pick a new one.\n\n"
         "Forces captains to rotate their attack — more strategy!\n\n"
         "📦 Requires <b>🥈 Silver plan</b> or above."
-    ),
-    "drs": (
-        "🔁 <b>DRS — Decision Review System</b>  <i>(Premium)</i>\n\n"
-        "Each team gets <b>1 review per innings</b>.\n\n"
-        "When a batter is given OUT they can immediately type\n"
-        "<b>/review</b> to challenge the decision.\n"
-        "The bot re-rolls: 50% chance the decision is overturned.\n\n"
-        "Adds a thrilling new layer of drama to dismissals!\n\n"
-        "📦 Requires <b>🥇 Gold plan</b>."
     ),
 }
 
@@ -224,13 +185,11 @@ async def _main_panel(chat_id: int):
 
     buttons.append([InlineKeyboardButton("─── 💎 Premium ───", callback_data="gs_noop")])
 
-    spam_unlocked  = premium and plan_unlocked(premium, "silver")
-    dn_unlocked    = premium and plan_unlocked(premium, "gold")
-    edge_unlocked  = premium and plan_unlocked(premium, "gold")
-    to_unlocked    = premium and plan_unlocked(premium, "silver")
-    pp_unlocked    = premium and plan_unlocked(premium, "silver")
-    ol_unlocked    = premium and plan_unlocked(premium, "silver")
-    drs_unlocked   = premium and plan_unlocked(premium, "gold")
+    spam_unlocked = premium and plan_unlocked(premium, "silver")
+    dn_unlocked   = premium and plan_unlocked(premium, "gold")
+    edge_unlocked = premium and plan_unlocked(premium, "gold")
+    to_unlocked   = premium and plan_unlocked(premium, "silver")
+    ol_unlocked   = premium and plan_unlocked(premium, "silver")
 
     # Row: spam_free | disabled_numbers
     spam_status = ("✅" if settings.get("spam_free", False) else "❌") if spam_unlocked else "🔒"
@@ -243,28 +202,20 @@ async def _main_panel(chat_id: int):
     ])
 
     # Row: edge_rule | ball_timeout
-    edge_status  = ("✅" if settings.get("edge_rule", False) else "❌") if edge_unlocked else "🔒"
-    cur_timeout  = settings.get("ball_timeout", 60)
-    to_label     = _timeout_label(cur_timeout)
-    to_status    = f"⏱ {to_label}" if to_unlocked else "🔒 ⏱ Timeout"
+    edge_status = ("✅" if settings.get("edge_rule", False) else "❌") if edge_unlocked else "🔒"
+    cur_timeout = settings.get("ball_timeout", 60)
+    to_label    = _timeout_label(cur_timeout)
+    to_status   = f"⏱ {to_label}" if to_unlocked else "🔒 ⏱ Timeout"
     buttons.append([
-        InlineKeyboardButton(f"{edge_status} ⚠️ Edge Rule",   callback_data="gs_view_edge_rule"),
-        InlineKeyboardButton(f"{to_status}",                  callback_data="gs_timeout"),
+        InlineKeyboardButton(f"{edge_status} ⚠️ Edge Rule", callback_data="gs_view_edge_rule"),
+        InlineKeyboardButton(f"{to_status}",                callback_data="gs_timeout"),
     ])
 
-    # Row: power_play | over_limit
-    pp_status  = ("✅" if settings.get("power_play", False) else "❌") if pp_unlocked else "🔒"
+    # Row: over_limit (standalone)
     ol_val     = settings.get("over_limit", 0)
     ol_display = f"{ol_val}ov" if ol_val and ol_unlocked else ("🔒" if not ol_unlocked else "off")
     buttons.append([
-        InlineKeyboardButton(f"{pp_status} ⚡ Power Play",    callback_data="gs_view_power_play"),
-        InlineKeyboardButton(f"🎳 Limit: {ol_display}",       callback_data="gs_ol"),
-    ])
-
-    # Row: drs (full width)
-    drs_status = ("✅" if settings.get("drs", False) else "❌") if drs_unlocked else "🔒"
-    buttons.append([
-        InlineKeyboardButton(f"{drs_status} 🔁 DRS Review System", callback_data="gs_view_drs"),
+        InlineKeyboardButton(f"🎳 Over Limit: {ol_display}", callback_data="gs_ol"),
     ])
 
     buttons.append([InlineKeyboardButton("✖ Close", callback_data="gs_close")])
@@ -481,7 +432,6 @@ async def gs_toggle_cb(client: Client, query: CallbackQuery):
     await set_group_setting(chat_id, feature, bool(value))
     await query.answer("✅ Setting updated!")
 
-    # ── Log setting change ─────────────────────────────────────────────────
     try:
         from plugins.utilities.logger import LOG_GROUP_ID
         chat  = query.message.chat
@@ -556,9 +506,10 @@ async def gs_dn_toggle_cb(client: Client, query: CallbackQuery):
         await query.answer(f"✅ Number {n} re-enabled!")
     else:
         if len(dn) >= 2:
-            return await query.answer("🚫 Max 2 numbers can be disabled!", show_alert=True)
+            return await query.answer("⚠️ Max 2 numbers can be blocked!", show_alert=True)
         dn.append(n)
-        await query.answer(f"🚫 Number {n} disabled!")
+        dn.sort()
+        await query.answer(f"🚫 Number {n} blocked!")
 
     await set_group_setting(chat_id, "disabled_numbers", dn)
     text, markup = await _dn_panel(chat_id)
@@ -588,16 +539,13 @@ async def gs_timeout_set_cb(client: Client, query: CallbackQuery):
         return await query.answer("Admins only!", show_alert=True)
 
     premium = await get_premium(chat_id)
-    if not premium or not plan_unlocked(premium, "basic"):
-        return await query.answer("🔒 Basic plan required!", show_alert=True)
+    if not premium or not plan_unlocked(premium, "silver"):
+        return await query.answer("🔒 Silver plan required!", show_alert=True)
 
-    secs  = int(query.data.split("_")[-1])
-    valid = [s for s, _ in TIMEOUT_OPTIONS]
-    if secs not in valid:
-        return await query.answer("Invalid option.", show_alert=True)
-
+    secs = int(query.data.split("_")[-1])
     await set_group_setting(chat_id, "ball_timeout", secs)
     await query.answer(f"✅ Timeout set to {_timeout_label(secs)}!")
+
     text, markup = await _timeout_panel(chat_id)
     try:
         await query.message.edit_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
@@ -628,14 +576,11 @@ async def gs_ol_set_cb(client: Client, query: CallbackQuery):
     if not premium or not plan_unlocked(premium, "silver"):
         return await query.answer("🔒 Silver plan required!", show_alert=True)
 
-    n     = int(query.data.split("_")[-1])
-    valid = OVER_LIMIT_OPTIONS + [0]
-    if n not in valid:
-        return await query.answer("Invalid option.", show_alert=True)
-
+    n = int(query.data.split("_")[-1])
     await set_group_setting(chat_id, "over_limit", n)
     label = f"{n} over(s) max" if n else "Off (no limit)"
-    await query.answer(f"✅ Over limit set to: {label}!")
+    await query.answer(f"✅ Over limit: {label}!")
+
     text, markup = await _over_limit_panel(chat_id)
     try:
         await query.message.edit_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)

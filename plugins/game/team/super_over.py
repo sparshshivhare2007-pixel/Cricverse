@@ -1,22 +1,20 @@
 """
-Super Over — triggered on match tie when super_over setting is enabled.
+Super Over — 1 over, 1 wicket, group command setup (no DM buttons).
 
 Flow:
-  1. trigger_super_over(client, match) called from end_match on tie
-  2. Bot announces tie in group, DMs batting captain to pick STRIKER
-  3. Bot DMs batting captain again to pick NON-STRIKER
-  4. Bot DMs bowling captain to pick BOWLER
-  5. Ball-by-ball play: bowler DMs number (1-6), batter sends (0-6) in group
-  6. If striker OUT → non-striker comes in (2 wickets total allowed)
-  7. 2 wickets or 6 balls → innings ends
-  8. Innings 2 → same DM setup for opposing teams
+  1. trigger_super_over called on tie
+  2. Bot shows numbered batting team list in group
+  3. Batting captain uses /batting <n> to pick striker
+  4. Bot shows numbered bowling team list in group
+  5. Bowling captain uses /bowling <n> to pick bowler
+  6. Ball-by-ball: bowler DMs 1-6, batter sends 0-6 in group
+  7. 1 wicket OR 6 balls → innings ends
+  8. Innings 2 → same command-based setup for opposing teams
   9. Winner declared; double-tie → final Tie
 """
 
 import asyncio
 import html
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
 
 from plugins.game.team import ACTIVE_MATCHES
@@ -25,7 +23,6 @@ from plugins.game.team import ACTIVE_MATCHES
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _m(uid, match: dict) -> str:
-    """Return a proper Telegram HTML mention for a user ID."""
     if not uid:
         return "<b>Player</b>"
     name = match.get("user_cache", {}).get(uid, "Player")
@@ -37,32 +34,7 @@ def _tname(match: dict, key: str) -> str:
     return html.escape(name) if name else f"Team {key}"
 
 
-def _back_btn(chat_id: int) -> InlineKeyboardMarkup:
-    clean = str(chat_id).replace("-100", "")
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🏏 Back to Group", url=f"https://t.me/c/{clean}/999999999")
-    ]])
-
-
-def _make_player_buttons(match, batting_team, cb_prefix, exclude_uid=None):
-    players = match.get("teams", {}).get(batting_team, {}).get("players", [])
-    cache   = match.get("user_cache", {})
-    buttons, row = [], []
-    for real_idx, uid in enumerate(players):
-        if uid == exclude_uid:
-            continue
-        name = html.escape(cache.get(uid, f"P{real_idx+1}"))[:20]
-        row.append(InlineKeyboardButton(name, callback_data=f"{cb_prefix}_{real_idx}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    return buttons
-
-
 def _balls_display(balls: list) -> str:
-    """Format balls list for display e.g. [ 1 • 4 • 0 • W • 6 ]"""
     parts = []
     for b in balls:
         if b == "W":
@@ -78,29 +50,38 @@ def _balls_display(balls: list) -> str:
     return "  ".join(parts) if parts else "—"
 
 
+def _player_list_text(match: dict, team: str) -> str:
+    players = match.get("teams", {}).get(team, {}).get("players", [])
+    cache   = match.get("user_cache", {})
+    lines   = []
+    for i, uid in enumerate(players, 1):
+        name = html.escape(cache.get(uid, f"Player {i}"))
+        lines.append(f"  <b>{i}.</b> {name}")
+    return "\n".join(lines)
+
+
 # ─── Entry ────────────────────────────────────────────────────────────────────
 
 async def trigger_super_over(client, match: dict):
-    chat_id = match["chat_id"]
-    teams   = match.get("teams", {})
-
+    chat_id  = match["chat_id"]
+    teams    = match.get("teams", {})
     so_bat_1 = match.get("batting_team", "B")
     so_bat_2 = match.get("bowling_team", "A")
 
     match["super_over"] = {
-        "active":            True,
-        "bat_order":         [so_bat_1, so_bat_2],
-        "current_innings":   1,
-        "scores":            {so_bat_1: 0, so_bat_2: 0},
-        "wickets":           {so_bat_1: 0, so_bat_2: 0},
-        "striker":           {so_bat_1: None, so_bat_2: None},
-        "non_striker":       {so_bat_1: None, so_bat_2: None},
-        "bowler":            {so_bat_1: None, so_bat_2: None},
-        "balls":             {so_bat_1: [], so_bat_2: []},
-        "bowled":            False,
-        "batted":            False,
-        "last_bowl":         None,
+        "active":          True,
+        "bat_order":       [so_bat_1, so_bat_2],
+        "current_innings": 1,
+        "scores":          {so_bat_1: 0, so_bat_2: 0},
+        "wickets":         {so_bat_1: 0, so_bat_2: 0},
+        "striker":         {so_bat_1: None, so_bat_2: None},
+        "bowler":          {so_bat_1: None, so_bat_2: None},
+        "balls":           {so_bat_1: [], so_bat_2: []},
+        "bowled":          False,
+        "batted":          False,
+        "last_bowl":       None,
         "prompt_dispatched": False,
+        "waiting_for":     "striker",
     }
     match["phase"] = "SUPER_OVER"
 
@@ -118,281 +99,199 @@ async def trigger_super_over(client, match: dict):
                 f"🅰️ <b>{_tname(match,'A')}:</b> {a_runs}  🆚  "
                 f"🅱️ <b>{_tname(match,'B')}:</b> {b_runs}\n\n"
                 "⚡ <b>SUPER OVER!</b>\n"
-                "┄ 1 over each  •  2 batters  •  2 wickets\n"
-                "┄ Highest score wins!\n"
+                "┄ 1 over  •  1 wicket  •  Highest score wins!\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🏏 <b>{name_bat1}</b> bats first  •  <b>{name_bat2}</b> chases\n\n"
-                "📩 <b>Captains — check your DM to pick your Super Over squad!</b>"
+                f"🏏 <b>{name_bat1}</b> bats first  •  <b>{name_bat2}</b> chases"
             ),
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
         print(f"SO announce error: {e}")
 
-    await asyncio.sleep(2)
-    await _ask_so_striker(client, match, so_bat_1)
+    await asyncio.sleep(1)
+    await _ask_batting(client, match)
 
 
-# ─── Setup: Striker (DM to batting captain) ───────────────────────────────────
-
-async def _ask_so_striker(client, match: dict, batting_team: str):
-    cap_id   = match.get("teams", {}).get(batting_team, {}).get("captain_id")
-    cache    = match.get("user_cache", {})
-    cap_name = html.escape(cache.get(cap_id, "Captain"))
-    buttons  = _make_player_buttons(match, batting_team, f"so_str_{match['chat_id']}")
-    name     = _tname(match, batting_team)
-
-    try:
-        await client.send_message(
-            cap_id,
-            (
-                "⚡ <b>SUPER OVER SETUP</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🏏 <b>{name}</b> bats first\n\n"
-                f"🧢 {cap_name}, pick your <b>OPENER / STRIKER</b>:"
-            ),
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,
-        )
-    except Exception as e:
-        print(f"SO DM striker error: {e}")
-
-
-# ─── Setup: Non-striker (DM to batting captain) ───────────────────────────────
-
-async def _ask_so_non_striker(client, match: dict, batting_team: str):
+async def _ask_batting(client, match: dict):
     so           = match["super_over"]
-    striker      = so["striker"][batting_team]
-    cap_id       = match.get("teams", {}).get(batting_team, {}).get("captain_id")
-    cache        = match.get("user_cache", {})
-    cap_name     = html.escape(cache.get(cap_id, "Captain"))
-    striker_name = html.escape(cache.get(striker, "Striker")) if striker else "?"
-    buttons      = _make_player_buttons(match, batting_team, f"so_nst_{match['chat_id']}", exclude_uid=striker)
-    name         = _tname(match, batting_team)
-
-    try:
-        await client.send_message(
-            cap_id,
-            (
-                "⚡ <b>SUPER OVER SETUP</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🏏 <b>{name}</b>\n"
-                f"   ⚔️ Opener: <b>{striker_name}</b>  ✅\n\n"
-                f"🧢 {cap_name}, now pick your <b>NON-STRIKER</b> (2nd batter):"
-            ),
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,
-        )
-    except Exception as e:
-        print(f"SO DM non-striker error: {e}")
-
-
-# ─── Setup: Bowler (DM to bowling captain) ────────────────────────────────────
-
-async def _ask_so_bowler(client, match: dict, bowling_team: str):
-    cap_id   = match.get("teams", {}).get(bowling_team, {}).get("captain_id")
-    players  = match.get("teams", {}).get(bowling_team, {}).get("players", [])
-    cache    = match.get("user_cache", {})
-    cap_name = html.escape(cache.get(cap_id, "Captain"))
-    name     = _tname(match, bowling_team)
-
-    buttons, row = [], []
-    for i, uid in enumerate(players):
-        pname = html.escape(cache.get(uid, f"P{i+1}"))[:20]
-        row.append(InlineKeyboardButton(pname, callback_data=f"so_bowl_{match['chat_id']}_{i}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-
-    try:
-        await client.send_message(
-            cap_id,
-            (
-                "⚡ <b>SUPER OVER SETUP</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 <b>{name}</b> bowls the Super Over\n\n"
-                f"🧢 {cap_name}, pick your <b>BOWLER</b>:"
-            ),
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,
-        )
-    except Exception as e:
-        print(f"SO DM bowler error: {e}")
-
-
-# ─── Callbacks ────────────────────────────────────────────────────────────────
-
-@Client.on_callback_query(filters.regex(r"^so_str_-?\d+_\d+$"))
-async def so_striker_pick(client, query):
-    parts    = query.data.split("_")
-    chat_id  = int(parts[2])
-    real_idx = int(parts[3])
-
-    match = ACTIVE_MATCHES.get(chat_id)
-    if not match:
-        return await query.answer("No active match.", show_alert=True)
-
-    so = match.get("super_over", {})
-    if not so.get("active"):
-        return await query.answer("Super over not active.", show_alert=True)
-
     innings      = so["current_innings"]
     batting_team = so["bat_order"][innings - 1]
     cap_id       = match.get("teams", {}).get(batting_team, {}).get("captain_id")
-
-    if query.from_user.id != cap_id:
-        return await query.answer("Only the batting captain can pick!", show_alert=True)
-    if so["striker"][batting_team] is not None:
-        return await query.answer("Striker already chosen!", show_alert=True)
-
-    players = match.get("teams", {}).get(batting_team, {}).get("players", [])
-    if real_idx >= len(players):
-        return await query.answer("Invalid choice.", show_alert=True)
-
-    uid  = players[real_idx]
-    name = html.escape(match.get("user_cache", {}).get(uid, "Player"))
-    so["striker"][batting_team] = uid
+    cap_name     = html.escape(match.get("user_cache", {}).get(cap_id, "Captain"))
+    bat_name     = _tname(match, batting_team)
+    player_list  = _player_list_text(match, batting_team)
 
     try:
-        await query.message.edit_text(
-            f"✅ <b>{name}</b> will open the batting (Striker) for <b>{_tname(match, batting_team)}</b>!",
+        await client.send_message(
+            match["chat_id"],
+            (
+                f"⚡ <b>SUPER OVER — {bat_name} to bat</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{player_list}\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🧢 <b>{cap_name}</b>, pick your striker:\n"
+                f"<code>/batting &lt;number&gt;</code>"
+            ),
             parse_mode=ParseMode.HTML,
         )
-    except Exception:
-        pass
-    await query.answer(f"{name} selected as Striker!")
-    await _ask_so_non_striker(client, match, batting_team)
+    except Exception as e:
+        print(f"SO ask batting error: {e}")
 
 
-@Client.on_callback_query(filters.regex(r"^so_nst_-?\d+_\d+$"))
-async def so_non_striker_pick(client, query):
-    parts    = query.data.split("_")
-    chat_id  = int(parts[2])
-    real_idx = int(parts[3])
-
-    match = ACTIVE_MATCHES.get(chat_id)
-    if not match:
-        return await query.answer("No active match.", show_alert=True)
-
-    so = match.get("super_over", {})
-    if not so.get("active"):
-        return await query.answer("Super over not active.", show_alert=True)
-
-    innings      = so["current_innings"]
-    batting_team = so["bat_order"][innings - 1]
-    cap_id       = match.get("teams", {}).get(batting_team, {}).get("captain_id")
-
-    if query.from_user.id != cap_id:
-        return await query.answer("Only the batting captain can pick!", show_alert=True)
-    if so["striker"][batting_team] is None:
-        return await query.answer("Pick striker first!", show_alert=True)
-    if so["non_striker"][batting_team] is not None:
-        return await query.answer("Non-striker already chosen!", show_alert=True)
-
-    players = match.get("teams", {}).get(batting_team, {}).get("players", [])
-    if real_idx >= len(players):
-        return await query.answer("Invalid choice.", show_alert=True)
-
-    uid = players[real_idx]
-    if uid == so["striker"][batting_team]:
-        return await query.answer("Can't pick the same player as striker!", show_alert=True)
-
-    name         = html.escape(match.get("user_cache", {}).get(uid, "Player"))
-    bowling_team = so["bat_order"][innings % 2]
-    so["non_striker"][batting_team] = uid
-
-    try:
-        await query.message.edit_text(
-            f"✅ <b>{name}</b> at the non-striker end!\n\n"
-            f"📩 <b>{_tname(match, bowling_team)}</b> captain — check your DM to pick the bowler!",
-            parse_mode=ParseMode.HTML,
-        )
-    except Exception:
-        pass
-    await query.answer(f"{name} selected as Non-Striker!")
-    await _ask_so_bowler(client, match, bowling_team)
-
-
-@Client.on_callback_query(filters.regex(r"^so_bowl_-?\d+_\d+$"))
-async def so_bowler_pick(client, query):
-    parts    = query.data.split("_")
-    chat_id  = int(parts[2])
-    idx      = int(parts[3])
-
-    match = ACTIVE_MATCHES.get(chat_id)
-    if not match:
-        return await query.answer("No active match.", show_alert=True)
-
-    so = match.get("super_over", {})
-    if not so.get("active"):
-        return await query.answer("Super over not active.", show_alert=True)
-
+async def _ask_bowling(client, match: dict):
+    so           = match["super_over"]
     innings      = so["current_innings"]
     batting_team = so["bat_order"][innings - 1]
     bowling_team = so["bat_order"][innings % 2]
     cap_id       = match.get("teams", {}).get(bowling_team, {}).get("captain_id")
-
-    if query.from_user.id != cap_id:
-        return await query.answer("Only the bowling captain can pick!", show_alert=True)
-    if so["bowler"][batting_team] is not None:
-        return await query.answer("Bowler already chosen!", show_alert=True)
-
-    players = match.get("teams", {}).get(bowling_team, {}).get("players", [])
-    if idx >= len(players):
-        return await query.answer("Invalid choice.", show_alert=True)
-
-    uid  = players[idx]
-    name = html.escape(match.get("user_cache", {}).get(uid, "Player"))
-    so["bowler"][batting_team] = uid
+    cap_name     = html.escape(match.get("user_cache", {}).get(cap_id, "Captain"))
+    bow_name     = _tname(match, bowling_team)
+    player_list  = _player_list_text(match, bowling_team)
+    striker_id   = so["striker"][batting_team]
+    striker_name = html.escape(match.get("user_cache", {}).get(striker_id, "?"))
 
     try:
-        await query.message.edit_text(
-            f"✅ <b>{name}</b> will bowl for <b>{_tname(match, bowling_team)}</b>!\n\n"
-            "⚡ <b>Super Over is starting — watch the group!</b>",
+        await client.send_message(
+            match["chat_id"],
+            (
+                f"✅ <b>Striker set:</b> {striker_name}\n\n"
+                f"🎯 <b>{bow_name}</b> — pick your bowler:\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{player_list}\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🧢 <b>{cap_name}</b>, use:\n"
+                f"<code>/bowling &lt;number&gt;</code>"
+            ),
             parse_mode=ParseMode.HTML,
         )
+    except Exception as e:
+        print(f"SO ask bowling error: {e}")
+
+
+# ─── Called from setup.py /batting handler ────────────────────────────────────
+
+async def handle_so_batting_cmd(client, message, match: dict, idx: int):
+    so           = match["super_over"]
+    innings      = so["current_innings"]
+    batting_team = so["bat_order"][innings - 1]
+    cap_id       = match.get("teams", {}).get(batting_team, {}).get("captain_id")
+    user         = message.from_user
+
+    if so.get("waiting_for") != "striker":
+        return await message.reply_text(
+            "⚠️ <b>Not waiting for a striker right now.</b>",
+            parse_mode=ParseMode.HTML,
+        )
+
+    if user.id != cap_id:
+        return await message.reply_text(
+            "🚫 Only the <b>batting captain</b> can pick the Super Over striker.",
+            parse_mode=ParseMode.HTML,
+        )
+
+    players = match.get("teams", {}).get(batting_team, {}).get("players", [])
+    if idx < 0 or idx >= len(players):
+        return await message.reply_text(
+            f"❌ Invalid number. Choose between 1 and {len(players)}.",
+            parse_mode=ParseMode.HTML,
+        )
+
+    striker_id = players[idx]
+    try:
+        user_obj = await client.get_users(striker_id)
+        match["user_cache"][striker_id] = user_obj.first_name
     except Exception:
         pass
-    await query.answer(f"{name} selected as Bowler!")
+
+    so["striker"][batting_team] = striker_id
+    so["waiting_for"]           = "bowler"
+
+    await message.reply_text(
+        f"🏏 <b>Striker locked:</b> {_m(striker_id, match)}",
+        parse_mode=ParseMode.HTML,
+    )
+    await asyncio.sleep(0.5)
+    await _ask_bowling(client, match)
+
+
+# ─── Called from setup.py /bowling handler ────────────────────────────────────
+
+async def handle_so_bowling_cmd(client, message, match: dict, idx: int):
+    so           = match["super_over"]
+    innings      = so["current_innings"]
+    batting_team = so["bat_order"][innings - 1]
+    bowling_team = so["bat_order"][innings % 2]
+    cap_id       = match.get("teams", {}).get(bowling_team, {}).get("captain_id")
+    user         = message.from_user
+
+    if so.get("waiting_for") != "bowler":
+        return await message.reply_text(
+            "⚠️ <b>Not waiting for a bowler right now.</b>",
+            parse_mode=ParseMode.HTML,
+        )
+
+    if user.id != cap_id:
+        return await message.reply_text(
+            "🚫 Only the <b>bowling captain</b> can pick the Super Over bowler.",
+            parse_mode=ParseMode.HTML,
+        )
+
+    players = match.get("teams", {}).get(bowling_team, {}).get("players", [])
+    if idx < 0 or idx >= len(players):
+        return await message.reply_text(
+            f"❌ Invalid number. Choose between 1 and {len(players)}.",
+            parse_mode=ParseMode.HTML,
+        )
+
+    bowler_id = players[idx]
+    try:
+        user_obj = await client.get_users(bowler_id)
+        match["user_cache"][bowler_id] = user_obj.first_name
+    except Exception:
+        pass
+
+    so["bowler"][batting_team] = bowler_id
+    so["waiting_for"]          = "playing"
+
+    await message.reply_text(
+        f"🎯 <b>Bowler locked:</b> {_m(bowler_id, match)}\n\n⚡ Super Over starting — watch this space!",
+        parse_mode=ParseMode.HTML,
+    )
+    await asyncio.sleep(0.5)
     await _start_so_innings(client, match)
 
 
 # ─── Innings Start ────────────────────────────────────────────────────────────
 
 async def _start_so_innings(client, match: dict):
-    so            = match["super_over"]
-    innings       = so["current_innings"]
-    batting_team  = so["bat_order"][innings - 1]
-    bowling_team  = so["bat_order"][innings % 2]
+    so           = match["super_over"]
+    innings      = so["current_innings"]
+    batting_team = so["bat_order"][innings - 1]
+    bowling_team = so["bat_order"][innings % 2]
 
-    striker_id     = so["striker"][batting_team]
-    non_striker_id = so["non_striker"][batting_team]
-    bowler_id      = so["bowler"][batting_team]
+    striker_id = so["striker"][batting_team]
+    bowler_id  = so["bowler"][batting_team]
 
     if not striker_id or not bowler_id:
+        print(f"SO _start_so_innings: striker or bowler is None — aborting")
         return
 
-    # Fresh ball state for this innings
     so["bowled"]            = False
     so["batted"]            = False
     so["last_bowl"]         = None
     so["prompt_dispatched"] = False
     so["balls"][batting_team] = []
 
-    chat_id  = match["chat_id"]
-    cache    = match.get("user_cache", {})
-    bat_name = _tname(match, batting_team)
-    bow_name = _tname(match, bowling_team)
-
-    striker_name     = html.escape(cache.get(striker_id, "Striker"))
-    non_striker_name = html.escape(cache.get(non_striker_id, "Non-Striker")) if non_striker_id else "—"
-    bowler_name      = html.escape(cache.get(bowler_id, "Bowler"))
+    chat_id      = match["chat_id"]
+    cache        = match.get("user_cache", {})
+    bat_name     = _tname(match, batting_team)
+    bow_name     = _tname(match, bowling_team)
+    striker_name = html.escape(cache.get(striker_id, "Striker"))
+    bowler_name  = html.escape(cache.get(bowler_id, "Bowler"))
 
     target_note = ""
     if innings == 2:
-        t1_score = so["scores"][so["bat_order"][0]]
+        t1_score    = so["scores"][so["bat_order"][0]]
         target_note = f"\n🎯 <b>Target: {t1_score + 1} run(s)</b>"
 
     try:
@@ -402,12 +301,11 @@ async def _start_so_innings(client, match: dict):
                 f"⚡ <b>SUPER OVER — Innings {innings}</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🏏 <b>Batting:</b>  {bat_name}\n"
-                f"   ⚔️ Striker:     <b>{striker_name}</b>\n"
-                f"   🤝 Non-Striker: <b>{non_striker_name}</b>\n\n"
+                f"   ⚔️ Striker:  <b>{striker_name}</b>\n\n"
                 f"🎯 <b>Bowling:</b>  {bow_name}\n"
-                f"   🎳 Bowler:      <b>{bowler_name}</b>\n"
+                f"   🎳 Bowler:   <b>{bowler_name}</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"⚡ 6 balls  •  2 wickets  •  Let's go!{target_note}"
+                f"⚡ 6 balls  •  1 wicket  •  Let's go!{target_note}"
             ),
             parse_mode=ParseMode.HTML,
         )
@@ -418,7 +316,7 @@ async def _start_so_innings(client, match: dict):
     await _so_prompt_ball(client, match)
 
 
-# ─── Ball Prompt (sent before each delivery) ──────────────────────────────────
+# ─── Ball Prompt ──────────────────────────────────────────────────────────────
 
 async def _so_prompt_ball(client, match: dict):
     so = match["super_over"]
@@ -462,24 +360,23 @@ async def _so_prompt_ball(client, match: dict):
         balls_left  = 6 - balls_done
         target_note = f"\n🎯 Need <b>{max(0, runs_needed)}</b> off <b>{balls_left}</b> balls"
 
+    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     group_btn = InlineKeyboardMarkup([[
         InlineKeyboardButton("ᴅᴇʟɪᴠᴇʀ ʙᴀʟʟ ⚾", url=f"https://t.me/{bot_username}")
     ]])
 
-    # Group message — bowler is a proper mention, striker is a proper mention
     bowler_mention  = f"<a href='tg://user?id={bowler_id}'>{bowler_name}</a>" if bowler_id else f"<b>{bowler_name}</b>"
     striker_mention = f"<a href='tg://user?id={striker_id}'>{striker_name}</a>" if striker_id else f"<b>{striker_name}</b>"
-
-    balls_line = f"📋 [ {balls_display} ]" if so["balls"][batting_team] else ""
+    balls_line      = f"📋 [ {balls_display} ]" if so["balls"][batting_team] else ""
 
     try:
         await client.send_message(
             chat_id,
             (
-                f"⚡ <b>SO Ball {ball_no}/6</b>  │  <b>{bat_name}:</b>  {score_disp}{target_note}\n"
+                f"⚡ <b>SO Ball {ball_no}/6</b>  │  <b>{bat_name}:</b> {score_disp}{target_note}\n"
                 f"{balls_line}\n"
                 f"🎳 {bowler_mention}  →  🏏 {striker_mention}\n"
-                "🔢 Bowler, check your DM to deliver!"
+                "🔢 Bowler, go to bot DM to deliver!"
             ).strip(),
             parse_mode=ParseMode.HTML,
             reply_markup=group_btn,
@@ -487,7 +384,7 @@ async def _so_prompt_ball(client, match: dict):
     except Exception as e:
         print(f"SO group prompt error: {e}")
 
-    # DM to bowler
+    # DM the bowler
     try:
         await client.send_message(
             bowler_id,
@@ -501,7 +398,6 @@ async def _so_prompt_ball(client, match: dict):
                 "🔢 Send a number (<b>1–6</b>) to bowl:"
             ).strip(),
             parse_mode=ParseMode.HTML,
-            reply_markup=_back_btn(chat_id),
         )
     except Exception as e:
         print(f"SO DM bowler error: {e}")
@@ -516,25 +412,27 @@ async def handle_so_bowl(client, match: dict, bowler_uid: int, bowl_num: int):
 
     innings      = so["current_innings"]
     batting_team = so["bat_order"][innings - 1]
+
     if so["bowler"][batting_team] != bowler_uid:
+        return
+
+    striker_id = so["striker"][batting_team]
+    if not striker_id:
+        print("SO handle_so_bowl: striker_id is None — cannot notify batter")
         return
 
     so["last_bowl"] = bowl_num
     so["bowled"]    = True
 
-    chat_id    = match["chat_id"]
-    striker_id = so["striker"][batting_team]
-    ball_no    = len(so["balls"][batting_team]) + 1
-
-    # Proper mention: tg://user?id link with their real name
-    striker_mention = _m(striker_id, match)
+    chat_id  = match["chat_id"]
+    ball_no  = len(so["balls"][batting_team]) + 1
 
     try:
         await client.send_message(
             chat_id,
             (
                 f"⚾ <b>Ball {ball_no} delivered!</b>\n"
-                f"🏏 {striker_mention} — send your shot (<b>0–6</b>) in the group!"
+                f"🏏 {_m(striker_id, match)} — send your shot (<b>0–6</b>) in the group!"
             ),
             parse_mode=ParseMode.HTML,
         )
@@ -549,6 +447,7 @@ async def handle_so_bat(client, match: dict, batter_uid: int, bat_num: int):
 
     innings      = so["current_innings"]
     batting_team = so["bat_order"][innings - 1]
+
     if so["striker"][batting_team] != batter_uid:
         return
 
@@ -575,206 +474,168 @@ async def handle_so_bat(client, match: dict, batter_uid: int, bat_num: int):
     if is_out:
         so["balls"][batting_team].append("W")
         so["wickets"][batting_team] += 1
-        non_striker = so["non_striker"][batting_team]
-        score_disp  = f"{so['scores'][batting_team]}/{so['wickets'][batting_team]}"
-
-        if non_striker and so["wickets"][batting_team] < 2:
-            old_striker  = so["striker"][batting_team]
-            old_name     = html.escape(match.get("user_cache", {}).get(old_striker, "Batter"))
-            new_name     = html.escape(match.get("user_cache", {}).get(non_striker, "Non-Striker"))
-            so["striker"][batting_team]     = non_striker
-            so["non_striker"][batting_team] = None
-
-            balls_display = _balls_display(so["balls"][batting_team])
-
-            try:
-                await client.send_message(
-                    chat_id,
-                    (
-                        f"☝️ <b>OUT!</b>  {_m(old_striker, match)} dismissed!\n"
-                        f"📋 [ {balls_display} ]\n"
-                        f"⚡ <b>{bat_name}:</b>  <b>{score_disp}</b>\n\n"
-                        f"🏏 {_m(non_striker, match)} walks in — new striker!"
-                    ),
-                    parse_mode=ParseMode.HTML,
-                )
-            except Exception:
-                pass
-
-            balls_done = len(so["balls"][batting_team])
-            if balls_done >= 6:
-                await _end_so_innings(client, match)
-            else:
-                await _so_prompt_ball(client, match)
-        else:
-            balls_display = _balls_display(so["balls"][batting_team])
-            try:
-                await client.send_message(
-                    chat_id,
-                    (
-                        f"☝️ <b>ALL OUT!</b>  {_m(batter_uid, match)} dismissed!\n"
-                        f"📋 [ {balls_display} ]\n"
-                        f"⚡ <b>{bat_name}:</b>  "
-                        f"<b>{so['scores'][batting_team]}/{so['wickets'][batting_team]}</b>"
-                    ),
-                    parse_mode=ParseMode.HTML,
-                )
-            except Exception:
-                pass
-            await _end_so_innings(client, match)
-    else:
-        so["scores"][batting_team] += runs
-        so["balls"][batting_team].append(runs)
         score_disp    = f"{so['scores'][batting_team]}/{so['wickets'][batting_team]}"
         balls_display = _balls_display(so["balls"][batting_team])
-        comm          = COMMS.get(runs, f"+{runs}")
-
-        target_note = ""
-        if innings == 2:
-            t1_score    = so["scores"][so["bat_order"][0]]
-            runs_needed = t1_score + 1 - so["scores"][batting_team]
-            balls_left  = 6 - len(so["balls"][batting_team])
-            if so["scores"][batting_team] > t1_score:
-                target_note = "\n🎯 <b>Target reached!</b>"
-            else:
-                target_note = f"\n🎯 Need <b>{max(0, runs_needed)}</b> off <b>{balls_left}</b> balls"
+        batter_name   = html.escape(match.get("user_cache", {}).get(batter_uid, "Batter"))
 
         try:
             await client.send_message(
                 chat_id,
                 (
-                    f"🏏 <b>SO Ball {ball_no}:</b>  +{runs}  {comm}\n"
-                    f"📋 [ {balls_display} ]\n"
-                    f"⚡ <b>{bat_name}:</b>  <b>{score_disp}</b>{target_note}"
+                    f"🎯 <b>WICKET!</b>  {batter_name} is OUT!\n"
+                    f"📊 {bat_name}: <b>{score_disp}</b>\n"
+                    f"📋 [ {balls_display} ]\n\n"
+                    "⚡ <b>Innings over — 1 wicket used!</b>"
                 ),
                 parse_mode=ParseMode.HTML,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"SO wicket announce error: {e}")
 
-        if innings == 2:
-            t1_score = so["scores"][so["bat_order"][0]]
-            if so["scores"][batting_team] > t1_score:
-                await _end_so_innings(client, match)
-                return
+        await asyncio.sleep(1)
+        await _end_so_innings(client, match)
+        return
 
-        if len(so["balls"][batting_team]) >= 6:
+    # Runs scored
+    so["scores"][batting_team] += runs
+    so["balls"][batting_team].append(runs)
+
+    score_disp    = f"{so['scores'][batting_team]}/{so['wickets'][batting_team]}"
+    balls_done    = len(so["balls"][batting_team])
+    balls_display = _balls_display(so["balls"][batting_team])
+    comm          = COMMS.get(runs, f"{runs} runs")
+
+    # Check innings-2 chase finish
+    if innings == 2:
+        t1_score = so["scores"][so["bat_order"][0]]
+        if so["scores"][batting_team] > t1_score:
+            try:
+                await client.send_message(
+                    chat_id,
+                    (
+                        f"🏏 <b>Ball {ball_no}:</b>  {runs}  •  {comm}\n"
+                        f"📊 {bat_name}: <b>{score_disp}</b>\n"
+                        f"📋 [ {balls_display} ]\n\n"
+                        "🎉 <b>Target chased! Innings over!</b>"
+                    ),
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception as e:
+                print(f"SO chase result error: {e}")
+            await asyncio.sleep(1)
             await _end_so_innings(client, match)
-        else:
-            await _so_prompt_ball(client, match)
-
-
-# ─── Innings End ──────────────────────────────────────────────────────────────
-
-async def _end_so_innings(client, match: dict):
-    so           = match["super_over"]
-    innings      = so["current_innings"]
-    batting_team = so["bat_order"][innings - 1]
-    chat_id      = match["chat_id"]
-    score        = so["scores"][batting_team]
-    wickets      = so["wickets"][batting_team]
-    balls        = so["balls"][batting_team]
-    balls_display = _balls_display(balls)
-    bat_name     = _tname(match, batting_team)
+            return
 
     try:
         await client.send_message(
             chat_id,
             (
-                f"🏁 <b>Super Over Innings {innings} Complete</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🏏 <b>{bat_name}:</b>  <b>{score}/{wickets}</b>  "
-                f"({len([b for b in balls if b != 'W'])} balls played)\n"
+                f"🏏 <b>Ball {ball_no}:</b>  {runs}  •  {comm}\n"
+                f"📊 {bat_name}: <b>{score_disp}</b>\n"
                 f"📋 [ {balls_display} ]"
             ),
             parse_mode=ParseMode.HTML,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"SO ball result error: {e}")
+
+    if balls_done >= 6:
+        await asyncio.sleep(1)
+        await _end_so_innings(client, match)
+        return
+
+    await asyncio.sleep(0.5)
+    so["batted"] = False
+    so["bowled"] = False
+    await _so_prompt_ball(client, match)
+
+
+# ─── End of Innings ───────────────────────────────────────────────────────────
+
+async def _end_so_innings(client, match: dict):
+    so      = match["super_over"]
+    innings = so["current_innings"]
 
     if innings == 1:
         so["current_innings"] = 2
-        batting_team_2 = so["bat_order"][1]
-        target = score + 1
-        bat2_name = _tname(match, batting_team_2)
-        await asyncio.sleep(2)
+        so["waiting_for"]     = "striker"
+        so["prompt_dispatched"] = False
+
+        next_bat  = so["bat_order"][1]
+        next_bowl = so["bat_order"][0]
+        prev_bat  = so["bat_order"][0]
+        t1_score  = so["scores"][prev_bat]
+
+        prev_balls = _balls_display(so["balls"][prev_bat])
+
         try:
             await client.send_message(
-                chat_id,
+                match["chat_id"],
                 (
-                    f"🎯 <b>Super Over Target</b>\n"
+                    f"📋 <b>Innings 1 Summary</b>\n"
                     "━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"<b>{bat2_name}</b> needs <b>{target}</b> run(s) to win!\n\n"
-                    "📩 Captains — check your DM to set up Innings 2!"
+                    f"🏏 <b>{_tname(match, prev_bat)}:</b>  {t1_score}/{so['wickets'][prev_bat]}\n"
+                    f"Balls: [ {prev_balls} ]\n"
+                    "━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🎯 <b>{_tname(match, next_bat)}</b> need <b>{t1_score + 1}</b> to win!"
                 ),
                 parse_mode=ParseMode.HTML,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"SO innings summary error: {e}")
+
         await asyncio.sleep(1)
-        await _ask_so_striker(client, match, batting_team_2)
+        await _ask_batting(client, match)
+
     else:
-        await _end_super_over(client, match)
+        await _declare_so_result(client, match)
 
 
-# ─── Super Over Final Result ───────────────────────────────────────────────────
+async def _declare_so_result(client, match: dict):
+    so       = match["super_over"]
+    team1    = so["bat_order"][0]
+    team2    = so["bat_order"][1]
+    score1   = so["scores"][team1]
+    score2   = so["scores"][team2]
+    wickets1 = so["wickets"][team1]
+    wickets2 = so["wickets"][team2]
+    balls1   = _balls_display(so["balls"][team1])
+    balls2   = _balls_display(so["balls"][team2])
+    name1    = _tname(match, team1)
+    name2    = _tname(match, team2)
 
-async def _end_super_over(client, match: dict):
-    so      = match["super_over"]
-    chat_id = match["chat_id"]
-    t1      = so["bat_order"][0]
-    t2      = so["bat_order"][1]
-    s1      = so["scores"][t1]
-    s2      = so["scores"][t2]
-    n1      = _tname(match, t1)
-    n2      = _tname(match, t2)
-    b1      = _balls_display(so["balls"][t1])
-    b2      = _balls_display(so["balls"][t2])
+    so["active"] = False
+    match["phase"] = "ENDED"
 
-    if s1 > s2:
-        winner      = t1
-        margin_text = f"🏆 <b>{n1}</b> wins by {s1 - s2} run(s)!"
-    elif s2 > s1:
-        winner      = t2
-        wkts_left   = 2 - so["wickets"][t2]
-        margin_text = f"🏆 <b>{n2}</b> wins by {wkts_left} wicket(s)!"
+    if score1 > score2:
+        winner_line = f"🏆 <b>{name1} WIN the Super Over!</b>  (+{score1 - score2} runs)"
+    elif score2 > score1:
+        winner_line = f"🏆 <b>{name2} WIN the Super Over!</b>  (+{score2 - score1} runs)"
     else:
-        winner      = "Tie"
-        margin_text = "🤝 Super Over also TIED! Match declared a <b>Tie</b>."
-
-    so["active"]   = False
-    match["phase"] = "finished"
+        winner_line = "🤝 <b>DOUBLE TIE — Match declared a Tie!</b>"
 
     try:
         await client.send_message(
-            chat_id,
+            match["chat_id"],
             (
                 "⚡ <b>SUPER OVER RESULT</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🏏 <b>{n1}:</b>  {s1} runs  •  [ {b1} ]\n"
-                f"🏏 <b>{n2}:</b>  {s2} runs  •  [ {b2} ]\n"
+                f"🏏 <b>{name1}:</b>  {score1}/{wickets1}\n"
+                f"   [ {balls1} ]\n\n"
+                f"🎯 <b>{name2}:</b>  {score2}/{wickets2}\n"
+                f"   [ {balls2} ]\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{margin_text}"
+                f"{winner_line}"
             ),
             parse_mode=ParseMode.HTML,
         )
-    except Exception:
-        pass
-
-    try:
-        from plugins.game.team.scorecard import save_match_stats
-        import asyncio as _asyncio
-        _asyncio.create_task(save_match_stats(match, winner))
     except Exception as e:
-        print(f"SO stats save error: {e}")
+        print(f"SO result error: {e}")
 
-    ACTIVE_MATCHES.pop(chat_id, None)
-
-    try:
-        from database.connection import db
-        await db.db["games"].update_one(
-            {"game_id": match.get("game_id")},
-            {"$set": {"status": "ended", "winner": winner}},
-        )
-    except Exception:
-        pass
+    # Clean up ACTIVE_MATCHES
+    chat_id = match.get("chat_id")
+    if chat_id and chat_id in ACTIVE_MATCHES:
+        try:
+            ACTIVE_MATCHES.pop(chat_id, None)
+        except Exception:
+            pass

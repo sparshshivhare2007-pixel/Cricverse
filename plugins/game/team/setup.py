@@ -449,6 +449,14 @@ async def set_batting(client, message):
     if match and match.get("mode") == "Solo":
         return
 
+    # ── Super Over interception ──────────────────────────────────────────────
+    if match and match.get("phase") == "SUPER_OVER":
+        so = match.get("super_over", {})
+        if so.get("active"):
+            from plugins.game.team.super_over import handle_so_batting_cmd
+            await handle_so_batting_cmd(client, message, match, idx)
+        return
+
     game = await get_active_game(chat_id)
     if not game:
         return await message.reply_text(
@@ -599,6 +607,14 @@ async def set_bowler(client, message):
 
     match = ACTIVE_MATCHES.get(chat_id)
     if match and match.get("mode") == "Solo":
+        return
+
+    # ── Super Over interception ──────────────────────────────────────────────
+    if match and match.get("phase") == "SUPER_OVER":
+        so = match.get("super_over", {})
+        if so.get("active"):
+            from plugins.game.team.super_over import handle_so_bowling_cmd
+            await handle_so_bowling_cmd(client, message, match, idx)
         return
 
     game = await get_active_game(chat_id)
