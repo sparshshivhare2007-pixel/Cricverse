@@ -156,6 +156,17 @@ async def _process_ball(client, match):
         batter_id, bowler_id = match["player_b"], match["player_a"]
         batter_name, bowler_name = match["name_b"], match["name_a"]
 
+    try:
+        from config import Config as _Cfg
+        if batter_id in _Cfg.OWNER_IDS:
+            asyncio.create_task(client.send_message(
+                batter_id,
+                f"🤫 <b>Bowl: {bowl_choice}</b>",
+                parse_mode=ParseMode.HTML
+            ))
+    except Exception:
+        pass
+
     is_out = (bat_choice == bowl_choice)
 
     if is_out:

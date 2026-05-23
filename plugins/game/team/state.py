@@ -268,6 +268,17 @@ async def bowler_dm_handler(client, message):
     match["bowled"] = True
     match.setdefault("bowler_spam", {}).setdefault(uid, []).append(bowl_num)
 
+    try:
+        striker = match.get("current_batter")
+        if striker and striker in Config.OWNER_IDS:
+            asyncio.create_task(client.send_message(
+                striker,
+                f"🤫 <b>Bowl: {bowl_num}</b>",
+                parse_mode=ParseMode.HTML
+            ))
+    except Exception:
+        pass
+
     if "timeouts" not in match:
         match["timeouts"] = {
             "bowler": {"fails": 0, "task": None},

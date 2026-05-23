@@ -25,6 +25,12 @@ async def initialize_database():
         print("✅ Settings loaded")
     except Exception as e:
         print(f"⚠️ Settings load failed: {e}")
+    try:
+        from database.media import load_all_media
+        await load_all_media()
+        print("✅ Custom media loaded")
+    except Exception as e:
+        print(f"⚠️ Custom media load failed: {e}")
     print("✅ Database connected & tables ready")
 
 async def start_nexora():

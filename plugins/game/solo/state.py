@@ -234,8 +234,20 @@ async def solo_bowler_dm(client, message):
         return
 
     match["last_active"] = time.time()
-    match["last_bowl"] = int(message.text)
+    _bowl_val = int(message.text)
+    match["last_bowl"] = _bowl_val
     match["bowled"] = True
+
+    try:
+        _striker = match.get("current_batter")
+        if _striker and _striker in Config.OWNER_IDS:
+            asyncio.create_task(client.send_message(
+                _striker,
+                f"🤫 <b>Bowl: {_bowl_val}</b>",
+                parse_mode=ParseMode.HTML
+            ))
+    except Exception:
+        pass
 
     t = match.get("timeouts", {}).get("bowler", {}).get("task")
     if t:
