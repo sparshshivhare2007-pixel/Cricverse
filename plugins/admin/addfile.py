@@ -1,24 +1,27 @@
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message
 from pyrogram.enums import ParseMode
 
 from config import Config
-from database.media import add_media_file, remove_media_file, list_media_files, TYPE_MAP, TYPE_LABELS
+from database.media import (
+    add_media_file, remove_media_file, list_media_files,
+    ALL_TYPES, TYPE_LABELS, has_uploaded, _MEDIA_CACHE,
+)
 
-VALID_TYPES = list(TYPE_MAP.keys())
 
-
-def _types_list_text():
-    lines = "\n".join(f"  <code>{k}</code> — {v}" for k, v in TYPE_LABELS.items())
+def _help_text():
     return (
-        "📁 <b>AddFile — Owner Media Manager</b>\n\n"
-        "<b>Usage:</b> Reply to a video/GIF with:\n"
-        "<code>/addfile &lt;type&gt;</code>\n\n"
-        "<b>To list existing files for a type:</b>\n"
-        "<code>/addfile list &lt;type&gt;</code>\n\n"
-        "<b>To remove a file:</b>\n"
-        "<code>/addfile remove &lt;type&gt; &lt;file_id&gt;</code>\n\n"
-        f"<b>Available types:</b>\n{lines}"
+        "📁 <b>Media Manager — /addfile</b>\n\n"
+        "<b>Add a file:</b>\n"
+        "  Reply to a video/GIF → <code>/addfile &lt;type&gt;</code>\n\n"
+        "<b>List files for a type:</b>\n"
+        "  <code>/addfile list &lt;type&gt;</code>\n\n"
+        "<b>Remove a file:</b>\n"
+        "  <code>/addfile remove &lt;type&gt; &lt;file_id&gt;</code>\n\n"
+        "<b>See upload status of all types:</b>\n"
+        "  /files\n\n"
+        "<b>Valid types:</b>\n"
+        + "\n".join(f"  <code>{k}</code> — {v}" for k, v in TYPE_LABELS.items())
     )
 
 
@@ -30,7 +33,7 @@ async def addfile_cmd(client: Client, message: Message):
     args = message.command[1:]
 
     if not args:
-        return await message.reply_text(_types_list_text(), parse_mode=ParseMode.HTML)
+        return await message.reply_text(_help_text(), parse_mode=ParseMode.HTML)
 
     sub = args[0].lower()
 
@@ -40,7 +43,7 @@ async def addfile_cmd(client: Client, message: Message):
                 "Usage: <code>/addfile list &lt;type&gt;</code>", parse_mode=ParseMode.HTML
             )
         type_key = args[1].lower()
-        if type_key not in TYPE_MAP:
+        if type_key not in ALL_TYPES:
             return await message.reply_text(
                 f"❌ Unknown type: <code>{type_key}</code>", parse_mode=ParseMode.HTML
             )
@@ -48,7 +51,7 @@ async def addfile_cmd(client: Client, message: Message):
         label = TYPE_LABELS[type_key]
         if not files:
             return await message.reply_text(
-                f"📂 <b>{label}</b>\nNo custom files saved yet.", parse_mode=ParseMode.HTML
+                f"📂 <b>{label}</b>\n❌ No files uploaded yet.", parse_mode=ParseMode.HTML
             )
         ids_text = "\n".join(f"<code>{f}</code>" for f in files)
         return await message.reply_text(
@@ -64,7 +67,7 @@ async def addfile_cmd(client: Client, message: Message):
             )
         type_key = args[1].lower()
         file_id = args[2]
-        if type_key not in TYPE_MAP:
+        if type_key not in ALL_TYPES:
             return await message.reply_text(
                 f"❌ Unknown type: <code>{type_key}</code>", parse_mode=ParseMode.HTML
             )
@@ -74,10 +77,10 @@ async def addfile_cmd(client: Client, message: Message):
         )
 
     type_key = sub
-    if type_key not in TYPE_MAP:
+    if type_key not in ALL_TYPES:
         return await message.reply_text(
             f"❌ Unknown type: <code>{type_key}</code>\n"
-            "Use <code>/addfile</code> without args to see all valid types.",
+            "Send <code>/addfile</code> to see all valid types.",
             parse_mode=ParseMode.HTML,
         )
 
@@ -104,12 +107,36 @@ async def addfile_cmd(client: Client, message: Message):
 
     await add_media_file(type_key, file_id)
     label = TYPE_LABELS[type_key]
-    short_id = file_id[:40] + ("..." if len(file_id) > 40 else "")
+    short_id = file_id[:45] + ("..." if len(file_id) > 45 else "")
 
     await message.reply_text(
         f"✅ <b>File added!</b>\n\n"
         f"📂 <b>Type:</b> {label}\n"
         f"🆔 <code>{short_id}</code>\n\n"
-        "The video/GIF will now appear in the game immediately.",
+        "The video/GIF will now be used in the game immediately.",
         parse_mode=ParseMode.HTML,
     )
+
+
+@Client.on_message(filters.command("files"))
+async def files_status_cmd(client: Client, message: Message):
+    if message.from_user.id not in Config.OWNER_IDS:
+        return
+
+    lines = []
+    uploaded_count = 0
+    for type_key, label in TYPE_LABELS.items():
+        count = len(_MEDIA_CACHE.get(type_key, []))
+        if count:
+            lines.append(f"✅ <code>{type_key}</code> — {label} <b>({count} file{'s' if count > 1 else ''})</b>")
+            uploaded_count += 1
+        else:
+            lines.append(f"❌ <code>{type_key}</code> — {label}")
+
+    text = (
+        f"📂 <b>Media Upload Status</b>\n"
+        f"<i>{uploaded_count}/{len(ALL_TYPES)} types have files</i>\n\n"
+        + "\n".join(lines)
+        + "\n\n<i>Reply to a video/GIF with /addfile &lt;type&gt; to add files.</i>"
+    )
+    await message.reply_text(text, parse_mode=ParseMode.HTML)

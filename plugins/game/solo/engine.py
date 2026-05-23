@@ -92,10 +92,9 @@ async def _safe_send_msg(client, chat_id, text, parse_mode=ParseMode.HTML, reply
 
 
 async def _send_achievement(client, chat_id, key, caption):
-    from Assets.files import ACHIEVE_VIDEOS, ACHIEVE_IMG
-    videos = [v for v in ACHIEVE_VIDEOS.get(key, []) if v and not v.startswith("FILE_ID")]
-    if videos:
-        file_id = random.choice(videos)
+    from database.media import get_uploaded_achieve
+    file_id = get_uploaded_achieve(key)
+    if file_id:
         try:
             await client.send_video(chat_id=chat_id, video=file_id,
                                     caption=caption, parse_mode=ParseMode.HTML)
@@ -112,14 +111,6 @@ async def _send_achievement(client, chat_id, key, caption):
             await asyncio.sleep(e.value)
         except Exception:
             pass
-    try:
-        await client.send_photo(chat_id=chat_id, photo=ACHIEVE_IMG,
-                                caption=caption, parse_mode=ParseMode.HTML)
-        return
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-    except Exception:
-        pass
     await _safe_send_msg(client, chat_id, caption)
 
 

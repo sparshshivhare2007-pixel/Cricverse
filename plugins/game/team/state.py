@@ -25,41 +25,27 @@ def get_mention(match, user_id):
     return f'<a href="tg://user?id={user_id}">{safe_name}</a>'
 
 async def try_send_video(client, chat_id, key, caption, reply_markup=None):
-    video_list = RUN_VIDEOS.get(str(key), [])
-    if not video_list:
+    from database.media import get_uploaded_video
+    file_id = get_uploaded_video(key)
+    if not file_id:
         return await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
-
-    file_id = random.choice(video_list)
-    if not file_id or file_id.startswith("FILE_ID"):
-        return await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
-
     try:
         return await client.send_video(
-            chat_id=chat_id,
-            video=file_id,
-            caption=caption,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.HTML
+            chat_id=chat_id, video=file_id, caption=caption,
+            reply_markup=reply_markup, parse_mode=ParseMode.HTML
         )
     except Exception as e:
         err = str(e).upper()
         if "ANIMATION" in err or "CONTENT_TYPE" in err or "VIDEO_CONTENT_REQUIRED" in err:
             try:
                 return await client.send_animation(
-                    chat_id=chat_id,
-                    animation=file_id,
-                    caption=caption,
-                    reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML
+                    chat_id=chat_id, animation=file_id, caption=caption,
+                    reply_markup=reply_markup, parse_mode=ParseMode.HTML
                 )
-            except Exception as anim_e:
-                print(f"❌ Both media types failed: {anim_e}")
-
+            except Exception:
+                pass
         return await client.send_message(
-            chat_id=chat_id,
-            text=caption,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.HTML
+            chat_id=chat_id, text=caption, reply_markup=reply_markup, parse_mode=ParseMode.HTML
         )
 
 async def send_result_visuals(client, chat_id, key, caption):

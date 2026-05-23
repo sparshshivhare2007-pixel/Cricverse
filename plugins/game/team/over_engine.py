@@ -208,39 +208,25 @@ async def announce_achievement_group(client, chat_id, achievement, match):
 
 
 async def _send_achievement_media(client, chat_id, achieve_type, caption):
-    from Assets.files import ACHIEVE_VIDEOS, ACHIEVE_IMG
-
-    _type_map = {
-        "BAT_50": 50, "BAT_100": 100, "BAT_150": 150, "BAT_250": 250,
-        "BOWL_3": 3, "BOWL_5": 5,
-        "HAT_TRICK": "HAT_TRICK",
-        "DUCK": "Duck",
-    }
-    key = _type_map.get(achieve_type)
-
-    if key is not None:
-        videos = ACHIEVE_VIDEOS.get(key, [])
-        if videos:
-            file_id = random.choice(videos)
-            try:
-                await client.send_video(chat_id=chat_id, video=file_id,
+    from database.media import get_uploaded_achieve
+    file_id = get_uploaded_achieve(achieve_type)
+    if file_id:
+        try:
+            await client.send_video(chat_id=chat_id, video=file_id,
+                                    caption=caption, parse_mode=ParseMode.HTML)
+            return
+        except Exception:
+            pass
+        try:
+            await client.send_animation(chat_id=chat_id, animation=file_id,
                                         caption=caption, parse_mode=ParseMode.HTML)
-                return
-            except Exception:
-                pass
-            try:
-                await client.send_animation(chat_id=chat_id, animation=file_id,
-                                            caption=caption, parse_mode=ParseMode.HTML)
-                return
-            except Exception:
-                pass
+            return
+        except Exception:
+            pass
     try:
-        await client.send_photo(chat_id=chat_id, photo=ACHIEVE_IMG,
-                                caption=caption, parse_mode=ParseMode.HTML)
-        return
+        await client.send_message(chat_id=chat_id, text=caption, parse_mode=ParseMode.HTML)
     except Exception:
         pass
-    await client.send_message(chat_id, caption, parse_mode=ParseMode.HTML)
 
 
 async def announce_achievement_dm(client, user_id, achievement):

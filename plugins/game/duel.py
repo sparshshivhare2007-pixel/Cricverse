@@ -61,10 +61,8 @@ def _match_key(a, b):
 
 
 def _get_video(key):
-    vids = RUN_VIDEOS.get(str(key), [])
-    if not vids:
-        vids = RUN_VIDEOS.get("1", [])
-    return random.choice(vids) if vids else None
+    from database.media import get_uploaded_video
+    return get_uploaded_video(key)
 
 
 async def _safe_send_video(client, chat_id, file_id, caption):

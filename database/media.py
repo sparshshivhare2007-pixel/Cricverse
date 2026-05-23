@@ -1,29 +1,9 @@
+import random
 from database.connection import db
-from Assets.files import RUN_VIDEOS, ACHIEVE_VIDEOS
 
 MEDIA_COLLECTION = "bot_media"
 
-TYPE_MAP = {
-    "0":         (RUN_VIDEOS,     "0"),
-    "1":         (RUN_VIDEOS,     "1"),
-    "2":         (RUN_VIDEOS,     "2"),
-    "3":         (RUN_VIDEOS,     "3"),
-    "4":         (RUN_VIDEOS,     "4"),
-    "5":         (RUN_VIDEOS,     "5"),
-    "6":         (RUN_VIDEOS,     "6"),
-    "out":       (RUN_VIDEOS,     "Out"),
-    "batting":   (RUN_VIDEOS,     "Batting"),
-    "bowling":   (RUN_VIDEOS,     "Bowling"),
-    "opening":   (RUN_VIDEOS,     "Opening"),
-    "50":        (ACHIEVE_VIDEOS, 50),
-    "100":       (ACHIEVE_VIDEOS, 100),
-    "150":       (ACHIEVE_VIDEOS, 150),
-    "250":       (ACHIEVE_VIDEOS, 250),
-    "duck":      (ACHIEVE_VIDEOS, "Duck"),
-    "3wkt":      (ACHIEVE_VIDEOS, 3),
-    "5wkt":      (ACHIEVE_VIDEOS, 5),
-    "hat_trick": (ACHIEVE_VIDEOS, "HAT_TRICK"),
-}
+_MEDIA_CACHE: dict = {}
 
 TYPE_LABELS = {
     "0":         "Dot Ball (0)",
@@ -47,48 +27,72 @@ TYPE_LABELS = {
     "hat_trick": "Achievement: Hat-Trick",
 }
 
+ALL_TYPES = list(TYPE_LABELS.keys())
+
+_ACHIEVE_KEY_MAP = {
+    "BAT_50": "50",   "BAT_100": "100",  "BAT_150": "150",  "BAT_250": "250",
+    "BOWL_3": "3wkt", "BOWL_5":  "5wkt",
+    "HAT_TRICK": "hat_trick", "DUCK": "duck",
+    50: "50", 100: "100", 150: "150", 250: "250",
+    3: "3wkt", 5: "5wkt",
+    "Duck": "duck", "HAT_TRICK": "hat_trick",
+}
+
+
+def _normalize(key) -> str:
+    return str(key).lower()
+
+
+def get_uploaded_video(key) -> str | None:
+    files = _MEDIA_CACHE.get(_normalize(key), [])
+    return random.choice(files) if files else None
+
+
+def get_uploaded_achieve(achieve_key) -> str | None:
+    canon = _ACHIEVE_KEY_MAP.get(achieve_key)
+    if not canon:
+        return None
+    files = _MEDIA_CACHE.get(canon, [])
+    return random.choice(files) if files else None
+
+
+def has_uploaded(key) -> bool:
+    return bool(_MEDIA_CACHE.get(_normalize(key)))
+
 
 async def add_media_file(type_key: str, file_id: str):
+    type_key = _normalize(type_key)
     await db.db[MEDIA_COLLECTION].update_one(
         {"type": type_key},
         {"$addToSet": {"file_ids": file_id}},
         upsert=True,
     )
-    target_dict, dict_key = TYPE_MAP[type_key]
-    lst = target_dict.get(dict_key)
-    if lst is None:
-        target_dict[dict_key] = [file_id]
-    elif file_id not in lst:
+    lst = _MEDIA_CACHE.setdefault(type_key, [])
+    if file_id not in lst:
         lst.append(file_id)
 
 
 async def remove_media_file(type_key: str, file_id: str):
+    type_key = _normalize(type_key)
     await db.db[MEDIA_COLLECTION].update_one(
         {"type": type_key},
         {"$pull": {"file_ids": file_id}},
     )
-    target_dict, dict_key = TYPE_MAP[type_key]
-    lst = target_dict.get(dict_key)
-    if lst and file_id in lst:
+    lst = _MEDIA_CACHE.get(type_key, [])
+    if file_id in lst:
         lst.remove(file_id)
 
 
 async def list_media_files(type_key: str):
-    doc = await db.db[MEDIA_COLLECTION].find_one({"type": type_key})
-    return doc.get("file_ids", []) if doc else []
+    type_key = _normalize(type_key)
+    return list(_MEDIA_CACHE.get(type_key, []))
 
 
 async def load_all_media():
+    _MEDIA_CACHE.clear()
     async for doc in db.db[MEDIA_COLLECTION].find():
-        type_key = doc.get("type")
+        type_key = _normalize(doc.get("type", ""))
         file_ids = doc.get("file_ids", [])
-        if not type_key or type_key not in TYPE_MAP or not file_ids:
-            continue
-        target_dict, dict_key = TYPE_MAP[type_key]
-        existing = target_dict.get(dict_key)
-        if existing is None:
-            target_dict[dict_key] = list(file_ids)
-        else:
-            for fid in file_ids:
-                if fid not in existing:
-                    existing.append(fid)
+        if type_key and file_ids:
+            _MEDIA_CACHE[type_key] = list(file_ids)
+    print(f"✅ Loaded custom media: {len(_MEDIA_CACHE)} type(s) with files")
