@@ -182,7 +182,7 @@ def build_solo_end_card(match) -> io.BytesIO:
     tw = draw.textlength(total_text, font=small_font)
     draw.text((cx - tw / 2, CARD_H - 75), total_text, font=small_font, fill=WHITE)
 
-    brand = "Panchayat Cricket Zone"
+    brand = "CricVerse"
     bw = draw.textlength(brand, font=small_font)
     draw.text((cx - bw / 2, CARD_H - 48), brand, font=small_font, fill=(180, 160, 220))
 

@@ -32,8 +32,8 @@ async def start_cmd(client: Client, message):
     caption = (
         f"{mood}\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n\n"
-        f"👤 <b>{first_name}</b>, welcome to <b>Panchayat Cricket Zone</b> ✨\n\n"
-        "🏏 <b>Panchayat Cricket Zone</b>\n"
+        f"👤 <b>{first_name}</b>, welcome to <b>CricVerse</b> ✨\n\n"
+        "🏏 <b>CricVerse</b>\n"
         "🔗 <i>Clone of @CricketLegacy2Bot</i>\n\n"
         "🎮 Play epic team & solo matches\n"
         "⚔️ Challenge rivals in 1v1 Duel\n"

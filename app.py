@@ -24,7 +24,7 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Panchayat Cricket Zone Logs</title>
+    <title>CricVerse Logs</title>
     <style>
         body { background: #0f172a; color: #e5e7eb; font-family: Consolas, monospace; padding: 20px; }
         h1 { color: #38bdf8; }
@@ -38,7 +38,7 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>📡 Panchayat Cricket Zone Live Logs</h1>
+    <h1>📡 CricVerse Live Logs</h1>
     <div class="controls">
         <select id="levelFilter"><option value="">ALL LEVELS</option><option value="INFO">INFO</option><option value="WARNING">WARNING</option><option value="ERROR">ERROR</option></select>
         <input type="text" id="search" placeholder="Search logs...">

@@ -145,7 +145,7 @@ def build_stats_image(users, groups, games_today, games_total, active_games, upt
     # ── footer tag ────────────────────────────────────────────────────────────
     draw.text(
         (W // 2, H - 22),
-        f"🕐 {datetime.now(timezone.utc).strftime('%d %b %Y  %H:%M')} UTC  •  Panchayat Cricket Zone",
+        f"🕐 {datetime.now(timezone.utc).strftime('%d %b %Y  %H:%M')} UTC  •  CricVerse",
         font=f_sub,
         fill=MUTED,
         anchor="mm",

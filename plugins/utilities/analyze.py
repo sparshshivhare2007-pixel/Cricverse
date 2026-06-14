@@ -176,7 +176,7 @@ Mood: {mood['tag']}
         "────┈┄┄╌╌╌╌┄┄┈────\n\n"
         f"{analysis}\n\n"
         "────┈┄┄╌╌╌╌┄┄┈────\n"
-        "✨ Panchayat Cricket Zone AI"
+        "✨ CricVerse AI"
     )
 
     await loading.edit_text(
@@ -247,7 +247,7 @@ async def send_group_analysis(client, message):
         f"🎮 <b>Total Matches:</b> {total_matches}\n\n"
         "🏆 <b>ACTIVITY RANK</b>\n"
         f"#{rank} out of {total_groups} groups\n\n"
-        "✨ Panchayat Cricket Zone • Group Intelligence"
+        "✨ CricVerse • Group Intelligence"
     )
 
     await loading.delete()

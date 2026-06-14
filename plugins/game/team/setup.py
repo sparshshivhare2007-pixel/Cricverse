@@ -185,7 +185,14 @@ async def set_captain(client, query):
         except Exception:
             pass
 
-    await send_toss(client, chat_id, game_id)
+    asyncio.create_task(
+        _run_ipl_then_toss(client, match, chat_id, game_id, capA["user_id"], capB["user_id"])
+    )
+
+
+async def _run_ipl_then_toss(client, match, chat_id, game_id, capA_uid, capB_uid):
+    from plugins.game.team.ipl_teams import ask_ipl_teams
+    await ask_ipl_teams(client, match, chat_id, game_id, capA_uid, capB_uid)
 
 
 async def send_toss(client, chat_id, game_id):

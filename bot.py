@@ -55,7 +55,7 @@ async def start_nexora():
 
     boot_speed = round(time.time() - start_time, 2)
 
-    print("🚀 Panchayat Cricket Zone Bot is Online!")
+    print("🚀 CricVerse Bot is Online!")
 
     try:
         me = await bot.get_me()
