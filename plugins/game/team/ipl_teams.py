@@ -2,6 +2,9 @@
 IPL Team Selection — after both captains are confirmed, each captain is DM'd
 with buttons to pick their IPL team (2 per row). Once both pick (or 60s timeout),
 announces the choices in the group and proceeds to toss.
+
+Duplicate guard: once a captain locks a team it is added to TAKEN_TEAMS[chat_id].
+If the other captain tries the same team they get an alert and must pick again.
 """
 
 import asyncio
@@ -19,7 +22,11 @@ IPL_TEAMS = [
     ("🟢 LSG", "LSG"),   ("🔵 GT", "GT"),
 ]
 
+# user_id  → {"future": asyncio.Future, "chat_id": int}
 PENDING_IPL: dict = {}
+
+# chat_id → set of already-claimed IPL codes for this game
+TAKEN_TEAMS: dict = {}
 
 
 def build_ipl_buttons():
@@ -35,10 +42,10 @@ def build_ipl_buttons():
     return InlineKeyboardMarkup(buttons)
 
 
-async def _ask_one_captain_ipl(client, cap_uid: int, team_key: str):
+async def _ask_one_captain_ipl(client, cap_uid: int, team_key: str, chat_id: int):
     loop = asyncio.get_event_loop()
     future = loop.create_future()
-    PENDING_IPL[cap_uid] = future
+    PENDING_IPL[cap_uid] = {"future": future, "chat_id": chat_id}
 
     try:
         await client.send_message(
@@ -67,10 +74,15 @@ async def _ask_one_captain_ipl(client, cap_uid: int, team_key: str):
 
 
 async def ask_ipl_teams(client, match: dict, chat_id: int, game_id: str, capA_uid: int, capB_uid: int):
-    pick_a, pick_b = await asyncio.gather(
-        _ask_one_captain_ipl(client, capA_uid, "A"),
-        _ask_one_captain_ipl(client, capB_uid, "B"),
-    )
+    TAKEN_TEAMS[chat_id] = set()
+
+    try:
+        pick_a, pick_b = await asyncio.gather(
+            _ask_one_captain_ipl(client, capA_uid, "A", chat_id),
+            _ask_one_captain_ipl(client, capB_uid, "B", chat_id),
+        )
+    finally:
+        TAKEN_TEAMS.pop(chat_id, None)
 
     match = ACTIVE_MATCHES.get(chat_id, match)
 
@@ -104,13 +116,25 @@ async def ask_ipl_teams(client, match: dict, chat_id: int, game_id: str, capA_ui
 @Client.on_callback_query(filters.regex(r"^ipl_pick_"))
 async def ipl_pick_handler(client, query):
     uid = query.from_user.id
-    future = PENDING_IPL.get(uid)
+    entry = PENDING_IPL.get(uid)
 
-    if future is None or future.done():
+    if entry is None or entry["future"].done():
         return await query.answer("No pending team selection or already picked.", show_alert=True)
 
     code = query.data[len("ipl_pick_"):]
-    future.set_result(code)
+    chat_id = entry["chat_id"]
+    taken = TAKEN_TEAMS.get(chat_id, set())
+
+    if code in taken:
+        return await query.answer(
+            f"❌ {code} is already taken by the other captain!\nPick a different team.",
+            show_alert=True,
+        )
+
+    taken.add(code)
+    TAKEN_TEAMS[chat_id] = taken
+
+    entry["future"].set_result(code)
     PENDING_IPL.pop(uid, None)
 
     await query.message.edit_text(
@@ -118,4 +142,4 @@ async def ipl_pick_handler(client, query):
         "Your choice has been locked in!",
         parse_mode=ParseMode.HTML,
     )
-    await query.answer(f"✅ {code} selected!")
+    await query.answer(f"✅ {code} locked in!")
