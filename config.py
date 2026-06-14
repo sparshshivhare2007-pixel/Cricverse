@@ -3,12 +3,12 @@ import os
 
 class Config:
     # Telegram API
-    API_ID = int(os.getenv("API_ID", "0"))
-    API_HASH = os.getenv("API_HASH", "")
-    BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+    API_ID = int(os.getenv("API_ID", "25887786"))
+    API_HASH = os.getenv("API_HASH", "e4201277f5f2883f22c150167bd24479")
+    BOT_TOKEN = os.getenv("BOT_TOKEN", "8970942794:AAGmRa84TEAB28xFB7Y7llvvSt0A5HtColk")
 
     # Database
-    MONGO_URL = os.getenv("MONGO_URL", "")
+    MONGO_URL = os.getenv("MONGO_URL", "mongodb+srv://clone1legacy:Vinit.123@clone1.sj89zbp.mongodb.net/?appName=clone1")
 
     # Bot Info
     BOT_USERNAME = os.getenv("BOT_USERNAME", "@CricketLegacy2Bot")
@@ -35,7 +35,7 @@ class Config:
     )
 
     # AI / NVIDIA
-    NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+    NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "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")
 
     # Images
     START_IMAGE = os.getenv(
