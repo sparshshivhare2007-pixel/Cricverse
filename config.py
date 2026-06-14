@@ -5,7 +5,7 @@ class Config:
     # Telegram API
     API_ID = int(os.getenv("API_ID", "25887786"))
     API_HASH = os.getenv("API_HASH", "e4201277f5f2883f22c150167bd24479")
-    BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+    BOT_TOKEN = os.getenv("BOT_TOKEN", "8970942794:AAGmRa84TEAB28xFB7Y7llvvSt0A5HtColk")
 
     # Database
     MONGO_URL = os.getenv("MONGO_URL", "mongodb+srv://clone1legacy:Vinit.123@clone1.sj89zbp.mongodb.net/?appName=clone1")
@@ -24,7 +24,7 @@ class Config:
     # Owners
     OWNER_IDS = {
         int(x)
-        for x in os.getenv("OWNER_IDS", "8186068163 7807828008").split()
+        for x in os.getenv("OWNER_IDS", "8186068163 1035382935").split()
     }
 
     # GitHub
@@ -45,5 +45,5 @@ class Config:
 
     # Logs
     LOG_CHANNEL = int(
-        os.getenv("LOG_CHANNEL", "-1003751894118")
+        os.getenv("LOG_CHANNEL", "-1003692127639")
     )
