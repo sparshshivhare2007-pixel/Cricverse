@@ -5,7 +5,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import Config
 from database.users import add_user, total_users
 
-OWN_BOT_LINK = "https://t.me/spideyyye"
+OWN_BOT_LINK = "https://t.me/oye_sparsh_baby"
 
 START_MOODS = [
     "🏏 𝗪𝗲𝗹𝗰𝗼𝗺𝗲, 𝗖𝗮𝗽𝘁𝗮𝗶𝗻!",
